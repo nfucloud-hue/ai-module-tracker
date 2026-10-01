@@ -131,6 +131,10 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .ggroup{padding:10px 14px;background:#fafbfd;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;font-weight:700;font-size:14px}
 .ggroup .pbar{width:120px}
 .gr{border-top:1px solid var(--line2);min-height:58px}
+.role-h{background:var(--brand-soft);color:var(--brand);font-size:15px}
+.role-h.helping-h{background:#f4f5f8;color:var(--ink2);margin-top:10px;border-top:1px solid var(--line)}
+.gr.helping .t{color:var(--ink2);font-weight:400}
+.gr.helping .code{color:var(--muted)}
 .gr>div{padding:8px 14px}
 .gr .nm{display:flex;gap:10px;align-items:center;min-width:0}
 .gr .nm .m{min-width:0}
@@ -655,21 +659,29 @@ function vWork() {
   const D = S.D, f = S.f, total = dn(PROJECT.end) - dn(PROJECT.start) + 1;
   const pos = s => Math.max(0, Math.min(100, (dn(s) - dn(PROJECT.start)) / total * 100));
   const todayX = TODAY >= PROJECT.start && TODAY <= PROJECT.end ? (dn(TODAY) - dn(PROJECT.start) + .5) / total * 100 : -1;
-  const match = t => (!f.who || t.owner === f.who || t.helperList.includes(f.who)) &&
-    (f.st === "all" || (f.st === "att" && t.attention) || (f.st === "run" && t.status !== "已完成" && t.start <= TODAY) || (f.st === "done" && t.status === "已完成")) &&
+  const match = t => (f.st === "all" || (f.st === "att" && t.attention) || (f.st === "run" && t.status !== "已完成" && t.start <= TODAY) || (f.st === "done" && t.status === "已完成")) &&
     (!f.q || (t.code + t.name + t.deliverable).toLowerCase().includes(f.q.toLowerCase()));
   const weekLines = WEEKS.slice(1).map(w => `<span class="wkl" style="left:${pos(w.s)}%"></span>`).join("");
+  const row = (t, helping) => `<div class="gr clickable${helping ? " helping" : ""}" data-act="task" data-id="${t.id}">
+      <div class="nm"><span class="code">${esc(t.code)}</span><div class="m"><div class="t">${esc(t.name)}</div>
+        <div class="s row" style="gap:6px">${f.who && !helping ? "" : `${av(t.owner)}<span>${helping ? "主責 " : ""}${esc(t.owner)}</span>`}${!helping && t.helperList.length ? `<span>${f.who ? "" : "· "}協辦 ${t.helperList.length > 3 ? t.helperList.length + " 人" : esc(t.helperList.join("、"))}</span>` : ""}</div></div></div>
+      <div class="trk"><div class="track">${weekLines}<div class="tb ${barCls(t)}" style="left:${pos(t.start)}%;width:${Math.max(1.4, pos(addDays(t.end, 1)) - pos(t.start))}%" title="${md(t.start)}–${md(t.end)}"><i style="width:${t.progress}%"></i></div>${todayX >= 0 ? `<span class="today" style="left:${todayX}%"></span>` : ""}</div></div>
+      <div class="pg"><span class="row" style="gap:8px"><span class="pc">${t.progress}%</span>${taskChip(t)}</span><span class="small muted">${md(t.start)}–${md(t.end)}</span></div>
+    </div>`;
   let rows = "";
-  D.groups.forEach(g => {
+  if (f.who) {
+    // 選了人員：主責與協辦分開列，主責在上
+    const own = D.tasks.filter(t => t.owner === f.who && match(t)), help = D.tasks.filter(t => t.owner !== f.who && t.helperList.includes(f.who) && match(t));
+    const ownAll = D.tasks.filter(t => t.owner === f.who), avg = ownAll.length ? stat(ownAll).actual : 0;
+    rows += `<div class="ggroup role-h"><span class="row" style="flex:1;gap:8px">${av(f.who)}<span>${esc(f.who)} 的主責工作</span><span class="chip nodot s-brand">${own.length} 項</span></span><span class="small muted nowrap">主責完成率</span><b class="small">${pct(avg)}</b></div>`;
+    rows += own.map(t => row(t)).join("") || `<div class="empty">沒有符合條件的主責工作</div>`;
+    rows += `<div class="ggroup role-h helping-h"><span class="row" style="flex:1;gap:8px"><span>協辦工作</span><span class="chip nodot s-idle">${help.length} 項</span></span><span class="small muted">支援其他同仁的工作</span></div>`;
+    rows += help.map(t => row(t, true)).join("") || `<div class="empty">沒有符合條件的協辦工作</div>`;
+  } else D.groups.forEach(g => {
     const ts = g.tasks.filter(match);
     if (!ts.length) return;
     rows += `<div class="ggroup"><span style="flex:1">${esc(g.name)}</span><span class="small muted nowrap">${g.done}/${g.tasks.length} 完成</span><div class="pbar ${g.actual + 10 < g.exp ? "warn" : ""}"><i style="width:${g.actual}%"></i><b style="left:${g.exp}%"></b></div><b class="small" style="width:36px">${pct(g.actual)}</b></div>`;
-    rows += ts.map(t => `<div class="gr clickable" data-act="task" data-id="${t.id}">
-      <div class="nm"><span class="code">${esc(t.code)}</span><div class="m"><div class="t">${esc(t.name)}</div>
-        <div class="s row" style="gap:6px">${av(t.owner)}<span>${esc(t.owner)}</span>${t.helperList.length ? `<span>· 協辦 ${t.helperList.length > 3 ? t.helperList.length + " 人" : esc(t.helperList.join("、"))}</span>` : ""}</div></div></div>
-      <div class="trk"><div class="track">${weekLines}<div class="tb ${barCls(t)}" style="left:${pos(t.start)}%;width:${Math.max(1.4, pos(addDays(t.end, 1)) - pos(t.start))}%" title="${md(t.start)}–${md(t.end)}"><i style="width:${t.progress}%"></i></div>${todayX >= 0 ? `<span class="today" style="left:${todayX}%"></span>` : ""}</div></div>
-      <div class="pg"><span class="row" style="gap:8px"><span class="pc">${t.progress}%</span>${taskChip(t)}</span><span class="small muted">${md(t.start)}–${md(t.end)}</span></div>
-    </div>`).join("");
+    rows += ts.map(t => row(t)).join("");
   });
   return `
   <div class="row between wrap" style="margin-bottom:14px"><div><h1>工作進度</h1><div class="muted small">點任一工作可查看回報紀錄、回覆或回報進度；紅線＝今天</div></div>
@@ -780,7 +792,7 @@ function vPeople() {
       <div class="stat3"><div><b>${pct(avg)}</b><span>主責完成率</span></div><div><b style="color:${prob ? "var(--bad)" : "inherit"}">${prob}</b><span>需注意</span></div><div><b>${hp}</b><span>協助他人中</span></div></div>
       <div class="small muted">主責 ${own.length} 項</div><div class="tlist">${own.map(tc).join("") || '<span class="small muted">—</span>'}</div>
       <div class="small muted" style="margin-top:10px">協辦 ${help.length} 項</div><div class="tlist">${help.map(tc).join("") || '<span class="small muted">—</span>'}</div>
-      <div class="small muted" style="margin-top:12px;border-top:1px solid var(--line2);padding-top:10px">${last ? `最近回報：${ago(last.createdAt)}（${esc((D.taskById[last.taskId] || {}).code || "")}）` : "尚未回報"}</div>
+      <div class="row between small muted" style="margin-top:12px;border-top:1px solid var(--line2);padding-top:10px"><span>${last ? `最近回報：${ago(last.createdAt)}（${esc((D.taskById[last.taskId] || {}).code || "")}）` : "尚未回報"}</span><button class="link" data-act="who" data-v="${esc(p.name)}">查看工作 →</button></div>
     </div>`;
   }).join("")}</div>`;
 }
@@ -945,6 +957,7 @@ document.addEventListener("click", e => {
     case "fst": S.f.st = v; render(); break;
     case "htab": S.helpTab = v; render(); break;
     case "trend": S.trendG = v; render(); break;
+    case "who": S.f.who = v; S.f.st = "all"; go("work"); break;
     case "help-new": mHelp(id); break;
     case "help-offer": mHelp(id, true); break;
     case "help-update": mHelpUpdate(id); break;
