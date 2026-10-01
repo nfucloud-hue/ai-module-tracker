@@ -4,6 +4,7 @@
  * 第一次使用：重新整理試算表 → 上方選單「專案管理」→「初始設定（第一次使用）」，再部署為網頁應用程式。
  */
 const SITE_URL = 'https://ai-module-tracker.vercel.app'; // 網站正式網址（產生專屬連結用）
+const OPEN_LOGIN = true; // true＝成員免密碼，登入畫面點名字即可進入（主管功能仍需主管密碼）
 
 const SHEETS = {
   tasks: {name: '工作項目', cols: ['id', 'code', 'group', 'name', 'deliverable', 'owner', 'helpers', 'start', 'end', 'weight', 'checkpoint', 'note'],
@@ -140,7 +141,9 @@ function doPost(e) {
 
 function handle_(p) {
   try {
-    const who = auth_(p.pin);
+    if (p.action === 'people') // 登入畫面用的名單（不含密碼）
+      return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').map(x => ({name: x.name, title: x.title})) : []});
+    const who = auth_(p.pin, p.as);
     if (!who) return out_({ok: false, error: 'pin'});
     const admin = who.role === 'admin';
     const deny = () => out_({ok: false, error: '只有主管可以執行這個動作'});
@@ -162,13 +165,15 @@ function handle_(p) {
   }
 }
 
-/** 「設定」B1 → 主管；「人員」E 欄 → 該成員。 */
-function auth_(pin) {
+/** 「設定」B1 → 主管；「人員」E 欄 → 該成員；OPEN_LOGIN 時也可只用姓名登入為成員。 */
+function auth_(pin, as) {
   pin = String(pin || '').trim();
-  if (!pin) return null;
-  if (pin === adminPin_()) return {role: 'admin', name: ''};
-  const p = read_('people').filter(x => String(x.pin).trim() === pin)[0];
-  return p ? {role: 'member', name: p.name} : null;
+  if (pin && pin === adminPin_()) return {role: 'admin', name: ''};
+  const people = read_('people');
+  const p = pin ? people.filter(x => String(x.pin).trim() === pin)[0] : null;
+  if (p) return {role: 'member', name: p.name};
+  const n = OPEN_LOGIN && as ? people.filter(x => x.name === String(as).trim())[0] : null;
+  return n ? {role: 'member', name: n.name} : null;
 }
 
 function readAll_() {

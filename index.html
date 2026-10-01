@@ -278,7 +278,7 @@ const SEC = ["未開始", "檢測中", "修補中", "複測通過"];
 const CLOUD = ["未開始", "部署中", "功能驗證", "送審中", "已上架"];
 const HELP = ["待回應", "協助中", "已解決"];
 const COLORS = ["#4f46e5", "#0e9f6e", "#e2562e", "#0891b2", "#c026d3", "#d97706", "#2563eb", "#db2777", "#059669", "#7c3aed"];
-const S = {pin: "", role: "", me: "", view: "", D: null, f: {who: "", st: "all", q: ""}, helpTab: "open"};
+const S = {pin: "", as: "", role: "", me: "", view: "", D: null, f: {who: "", st: "all", q: ""}, helpTab: "open"};
 const TODAY = ymd(new Date());
 const WEEKS = (() => {
   const w = [{n: 1, s: "2026-10-01", e: "2026-10-04"}];
@@ -334,7 +334,7 @@ const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 /* ================= 後端呼叫（示範模式改用本機資料） ================= */
 async function call(action, extra) {
   if (DEMO) return demoCall(action, extra || {});
-  const res = await fetch(API, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({action, pin: S.pin}, extra || {}))});
+  const res = await fetch(API, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({action, pin: S.pin, as: S.as}, extra || {}))});
   const j = await res.json();
   if (!j.ok) throw new Error(j.error === "pin" ? "密碼不正確" : j.error);
   return j;
@@ -905,7 +905,7 @@ document.addEventListener("click", e => {
     case "report": mReport(id); break;
     case "close": closeModal(); break;
     case "refresh": refresh(true); break;
-    case "logout": try { localStorage.removeItem("pm-pin"); localStorage.removeItem("pm-demo-who"); } catch (x) {} history.replaceState(null, "", location.pathname); location.reload(); break;
+    case "logout": try { localStorage.removeItem("pm-pin"); localStorage.removeItem("pm-as"); localStorage.removeItem("pm-demo-who"); } catch (x) {} history.replaceState(null, "", location.pathname); location.reload(); break;
     case "demo-reset": if (confirm("要清除示範資料、還原成範例嗎？")) { try { localStorage.removeItem(DKEY); } catch (x) {} refresh(); } break;
     case "fst": S.f.st = v; render(); break;
     case "htab": S.helpTab = v; render(); break;
@@ -976,13 +976,31 @@ function loginView(err) {
     app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => { S.me = b.dataset.login; S.role = S.me ? "member" : "admin"; try { localStorage.setItem("pm-demo-who", S.me || "@admin"); } catch (e) {} start(); });
     return;
   }
-  app.innerHTML = `<div class="login"><form class="card" id="lf"><div class="logo">AI</div><h1>專案進度管理</h1>
-    <div class="muted small" style="margin-bottom:18px">${esc(PROJECT.name)}</div>
-    <div class="f"><label>請輸入你的密碼</label><input type="text" inputmode="numeric" autocomplete="off" name="pin" class="inp" style="font-size:20px;letter-spacing:4px;text-align:center" autofocus></div>
-    ${err ? `<div style="color:var(--bad);font-size:14px;margin-bottom:10px">${esc(err)}</div>` : ""}
-    <button class="btn" style="width:100%">進入</button>
-    <div class="muted small" style="margin-top:14px">密碼由計畫管理者提供；使用專屬連結開啟可免輸入。</div></form></div>`;
-  document.getElementById("lf").onsubmit = e => { e.preventDefault(); S.pin = new FormData(e.target).get("pin").trim(); start(true); };
+  const pinForm = (open) => `<form id="lf" class="${open ? "" : "hidden"}" style="margin-top:16px">
+    <div class="f"><label>${S.people && S.people.length ? "主管密碼" : "請輸入你的密碼"}</label><input type="text" inputmode="numeric" autocomplete="off" name="pin" class="inp" style="font-size:20px;letter-spacing:4px;text-align:center"></div>
+    <button class="btn" style="width:100%">進入</button></form>`;
+  const errHtml = err ? `<div style="color:var(--bad);font-size:14px;margin-top:12px">${esc(err)}</div>` : "";
+  if (S.people && S.people.length) {
+    // 成員免密碼：點名字直接進入；主管另用密碼
+    app.innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
+      <div class="muted small">${esc(PROJECT.name)}<br>請點選你的名字進入</div>
+      <div class="who-list">${S.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}</span></span></button>`).join("")}</div>
+      ${errHtml}
+      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /密碼/.test(err))}</div></div>`;
+    app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => { S.as = b.dataset.login; S.pin = ""; try { localStorage.setItem("pm-as", S.as); } catch (e) {} start(); });
+    document.getElementById("adm").onclick = () => document.getElementById("lf").classList.toggle("hidden");
+  } else {
+    app.innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
+      <div class="muted small">${esc(PROJECT.name)}</div>${pinForm(true)}${errHtml}
+      <div class="muted small" style="margin-top:14px">密碼由計畫管理者提供；使用專屬連結開啟可免輸入。</div></div></div>`;
+  }
+  document.getElementById("lf").onsubmit = e => { e.preventDefault(); S.pin = new FormData(e.target).get("pin").trim(); S.as = ""; start(true); };
+}
+async function showLogin(err) {
+  if (!S.people) {
+    try { const j = await call("people"); S.people = j.people || []; } catch (e) { S.people = []; }
+  }
+  loginView(err);
 }
 async function start(fromForm) {
   try {
@@ -992,8 +1010,9 @@ async function start(fromForm) {
     S.view = navItems().some(i => i[0] === v) ? v : (S.role === "member" ? "my" : "home");
     render();
   } catch (e) {
-    try { localStorage.removeItem("pm-pin"); } catch (x) {}
-    loginView(e.message === "密碼不正確" ? "密碼不正確，請再確認" : "連線失敗：" + e.message);
+    try { localStorage.removeItem("pm-pin"); localStorage.removeItem("pm-as"); } catch (x) {}
+    S.pin = ""; S.as = "";
+    showLogin(e.message === "密碼不正確" ? "密碼不正確，請再確認" : "連線失敗：" + e.message);
   }
 }
 (function init() {
@@ -1004,7 +1023,10 @@ async function start(fromForm) {
   }
   const k = /(?:^#|&)k=([^&]+)/.exec(location.hash);
   let pin = k ? decodeURIComponent(k[1]) : ""; if (!pin) try { pin = localStorage.getItem("pm-pin") || ""; } catch (e) {}
-  if (pin) { S.pin = pin; start(true); } else loginView();
+  if (pin) { S.pin = pin; return start(true); }
+  let as = ""; try { as = localStorage.getItem("pm-as") || ""; } catch (e) {}
+  if (as) { S.as = as; return start(); }
+  showLogin();
 })();
 </script>
 </body>
