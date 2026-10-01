@@ -174,17 +174,18 @@ function handle_(p) {
     if (p.action === 'people') // 登入畫面用的名單（不含密碼）
       return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').map(x => ({name: x.name, title: x.title, manager: isMgr_(x)})) : []});
     const who = auth_(p.pin, p.as);
-    if (who && who.manager) return out_({ok: false, error: 'manager'});
     if (!who) return out_({ok: false, error: 'pin'});
     const admin = who.role === 'admin';
     const deny = () => out_({ok: false, error: '只有主管可以執行這個動作'});
+    const full = admin && !who.limited; // 點名字登入的主管：可看全部、回覆，但不能刪除或修改工作項目
+    const denyFull = () => out_({ok: false, error: '刪除與修改工作項目請用「主管登入」或主管專屬連結'});
     switch (p.action) {
-      case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name}, readAll_()));
+      case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name, limited: !!who.limited}, readAll_()));
       case 'report': return locked_(() => addReport_(p.report || {}, who));
       case 'reply': return admin ? locked_(() => replyReport_(p.id, p.reply)) : deny();
-      case 'deleteReport': return admin ? locked_(() => deleteRow_('reports', p.id)) : deny();
-      case 'saveTask': return admin ? locked_(() => saveTask_(p.task || {})) : deny();
-      case 'deleteTask': return admin ? locked_(() => deleteRow_('tasks', p.id)) : deny();
+      case 'deleteReport': return full ? locked_(() => deleteRow_('reports', p.id)) : admin ? denyFull() : deny();
+      case 'saveTask': return full ? locked_(() => saveTask_(p.task || {})) : admin ? denyFull() : deny();
+      case 'deleteTask': return full ? locked_(() => deleteRow_('tasks', p.id)) : admin ? denyFull() : deny();
       case 'help': return locked_(() => addHelp_(p.help || {}, who));
       case 'helpUpdate': return locked_(() => updateHelp_(p, who));
       case 'saveModule': return locked_(() => saveModule_(p.module || {}, who));
@@ -204,7 +205,7 @@ function auth_(pin, as) {
   const p = pin ? people.filter(x => String(x.pin).trim() === pin)[0] : null;
   if (p) return {role: isMgr_(p) ? 'admin' : 'member', name: p.name}; // 角色為「主管」者用個人密碼／專屬連結登入即有主管權限
   const n = OPEN_LOGIN && as ? people.filter(x => x.name === String(as).trim())[0] : null;
-  if (n && isMgr_(n)) return {manager: true}; // 主管不能只點名字登入，避免被冒用
+  if (n && isMgr_(n)) return {role: 'admin', name: n.name, limited: true}; // 主管點名字即可進入，但不能刪除／修改工作項目
   return n ? {role: 'member', name: n.name} : null;
 }
 function isMgr_(p) { return String(p.role || '').trim() === '主管'; }

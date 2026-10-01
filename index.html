@@ -336,12 +336,12 @@ async function call(action, extra) {
   if (DEMO) return demoCall(action, extra || {});
   const res = await fetch(API, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({action, pin: S.pin, as: S.as}, extra || {}))});
   const j = await res.json();
-  if (!j.ok) throw new Error(j.error === "pin" ? "密碼不正確" : j.error === "manager" ? "主管請使用自己的專屬連結登入，或輸入個人密碼" : j.error);
+  if (!j.ok) throw new Error(j.error === "pin" ? "密碼不正確" : j.error);
   return j;
 }
 async function load() {
   const j = await call("data");
-  S.role = j.role; S.me = j.me || "";
+  S.role = j.role; S.me = j.me || ""; S.limited = !!j.limited;
   S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people};
   derive();
 }
@@ -672,7 +672,7 @@ function vWork() {
   });
   return `
   <div class="row between wrap" style="margin-bottom:14px"><div><h1>工作進度</h1><div class="muted small">點任一工作可查看回報紀錄、回覆或回報進度；紅線＝今天</div></div>
-    <div class="row">${S.role === "admin" ? `<button class="btn ghost" data-act="task-edit">＋ 新增工作</button>` : ""}<button class="btn" data-act="report">＋ 回報進度</button></div></div>
+    <div class="row">${S.role === "admin" && !S.limited ? `<button class="btn ghost" data-act="task-edit">＋ 新增工作</button>` : ""}<button class="btn" data-act="report">＋ 回報進度</button></div></div>
   <div class="filters">
     <div class="seg">${[["all", "全部"], ["att", "需注意"], ["run", "進行中"], ["done", "已完成"]].map(s => `<button data-act="fst" data-v="${s[0]}" class="${f.st === s[0] ? "on" : ""}">${s[1]}</button>`).join("")}</div>
     <select data-fil="who"><option value="">所有人員</option>${D.people.map(p => `<option ${f.who === p.name ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
@@ -816,14 +816,14 @@ function mTask(id) {
     <h3 style="margin-bottom:12px">回報紀錄 <span class="muted small">（${reps.length}）</span></h3>
     ${reps.length ? `<div class="tl">${reps.map(r => `<div class="it">
       <div class="row wrap" style="gap:8px">${av(r.reporter)}<b>${esc(r.reporter)}</b><span class="muted small">${ago(r.createdAt)}</span>${chip(r.status)}<b class="small">${r.progress}%</b>
-        ${S.role === "admin" ? `<button type="button" class="link small" style="margin-left:auto;color:var(--muted)" data-act="rep-del" data-id="${r.id}">刪除</button>` : ""}</div>
+        ${S.role === "admin" && !S.limited ? `<button type="button" class="link small" style="margin-left:auto;color:var(--muted)" data-act="rep-del" data-id="${r.id}">刪除</button>` : ""}</div>
       ${r.done ? `<div class="kv"><b>完成：</b>${esc(r.done)}</div>` : ""}
       ${r.next ? `<div class="kv"><b>下一步：</b>${esc(r.next)}</div>` : ""}
       ${r.issue ? `<div class="kv" style="color:var(--bad)"><b style="color:var(--bad)">難題：</b>${esc(r.issue)}</div>` : ""}
       ${r.reply ? `<div class="reply"><b>主管回覆：</b>${esc(r.reply)}</div>` : ""}
       ${S.role === "admin" ? `<div class="row" style="margin-top:8px"><input class="inp" id="rp-${r.id}" placeholder="${r.reply ? "修改回覆…" : "給予指示或回覆…"}" style="padding:6px 10px;font-size:14px"><button type="button" class="btn sm" data-act="reply" data-id="${r.id}">送出</button></div>` : ""}
     </div>`).join("")}</div>` : `<div class="empty">還沒有人回報這項工作</div>`}`;
-  const foot = `${S.role === "admin" ? `<button type="button" class="btn ghost" data-act="task-edit" data-id="${t.id}" style="margin-right:auto">編輯</button>` : ""}
+  const foot = `${S.role === "admin" && !S.limited ? `<button type="button" class="btn ghost" data-act="task-edit" data-id="${t.id}" style="margin-right:auto">編輯</button>` : ""}
     ${S.role === "member" && t.status !== "已完成" ? `<button type="button" class="btn ghost" data-act="help-new" data-id="${t.id}">請求協助</button>` : ""}
     ${canReport(t) ? `<button type="button" class="btn" data-act="report" data-id="${t.id}">回報進度</button>` : ""}`;
   modal(`<span class="code" style="font-size:15px">${esc(t.code)}</span> ${esc(t.name)}`, body, foot);
@@ -1021,14 +1021,8 @@ function loginView(err) {
       <div class="muted small">${esc(PROJECT.name)}<br>請點選你的名字進入</div>
       <div class="who-list">${S.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}${p.manager ? " · 主管" : ""}</span></span></button>`).join("")}</div>
       ${errHtml}
-      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /密碼|主管/.test(err))}</div></div>`;
+      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /密碼/.test(err))}</div></div>`;
     app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => {
-      const p = S.people.find(x => x.name === b.dataset.login);
-      if (p && p.manager) { // 主管不能只點名字登入
-        const f = document.getElementById("lf"); f.classList.remove("hidden");
-        f.querySelector("label").textContent = p.name + "（主管）請輸入個人密碼，或直接使用專屬連結";
-        f.querySelector("input").focus(); return;
-      }
       S.as = b.dataset.login; S.pin = ""; try { localStorage.setItem("pm-as", S.as); } catch (e) {} start();
     });
     document.getElementById("adm").onclick = () => document.getElementById("lf").classList.toggle("hidden");
