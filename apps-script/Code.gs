@@ -127,7 +127,8 @@ function setupPins() {
     s.getRange(i + 2, 6).setNumberFormat('General').setFormula('="' + SITE_URL + '/#k="&E' + (i + 2));
   });
   s.setColumnWidth(4, 320); s.setColumnWidth(6, 380);
-  const msg = '完成！新增 ' + n + ' 組個人密碼。請到「人員」分頁 F 欄複製各自的專屬連結私訊給本人；主管連結在「設定」分頁。';
+  const ss = SpreadsheetApp.getActive();
+  const msg = '完成！新增 ' + n + ' 組個人密碼。資料存在試算表「' + ss.getName() + '」：' + ss.getUrl() + ' （成員名單在「人員」分頁，主管密碼在「設定」B1）';
   Logger.log(msg);
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* 從編輯器執行時沒有試算表畫面 */ }
 }
