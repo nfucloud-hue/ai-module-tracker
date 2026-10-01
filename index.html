@@ -452,6 +452,7 @@ function derive() {
     else c.current = +c.current || 0;
   });
   D.taskById = Object.fromEntries(D.tasks.map(t => [t.id, t]));
+  D.staff = D.people.filter(p => !p.manager); // 執行人員（不含主管），用於人員頁、協作關係與選人清單
 }
 function stat(ts, name) {
   const w = ts.reduce((s, t) => s + t.weight, 0) || 1;
@@ -675,7 +676,7 @@ function vWork() {
     <div class="row">${S.role === "admin" && !S.limited ? `<button class="btn ghost" data-act="task-edit">＋ 新增工作</button>` : ""}<button class="btn" data-act="report">＋ 回報進度</button></div></div>
   <div class="filters">
     <div class="seg">${[["all", "全部"], ["att", "需注意"], ["run", "進行中"], ["done", "已完成"]].map(s => `<button data-act="fst" data-v="${s[0]}" class="${f.st === s[0] ? "on" : ""}">${s[1]}</button>`).join("")}</div>
-    <select data-fil="who"><option value="">所有人員</option>${D.people.map(p => `<option ${f.who === p.name ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+    <select data-fil="who"><option value="">所有人員</option>${D.staff.map(p => `<option ${f.who === p.name ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
     <input data-fil="q" placeholder="搜尋編號或名稱" value="${esc(f.q)}" style="min-width:160px">
   </div>
   <div class="card gantt">
@@ -726,7 +727,7 @@ function helpCard(h) {
   </div>`;
 }
 function matrix() {
-  const D = S.D, P = D.people.map(p => p.name), m = {};
+  const D = S.D, P = D.staff.map(p => p.name), m = {};
   const add = (helper, owner, n) => { if (helper === owner || !P.includes(helper) || !P.includes(owner)) return; m[helper + ">" + owner] = (m[helper + ">" + owner] || 0) + n; };
   D.tasks.forEach(t => t.helperList.forEach(h => add(h, t.owner, 1)));
   D.helps.forEach(h => add(h.helper, h.requester, 1));
@@ -767,7 +768,7 @@ function vModules() {
 function vPeople() {
   const D = S.D;
   return `<div style="margin-bottom:14px"><h1>人員分工</h1><div class="muted small">每位成員的主責／協辦工作、負荷與最新回報狀況</div></div>
-  <div class="grid g3">${D.people.map(p => {
+  <div class="grid g3">${D.staff.map(p => {
     const own = D.tasks.filter(t => t.owner === p.name), help = D.tasks.filter(t => t.owner !== p.name && t.helperList.includes(p.name));
     const last = D.reports.find(r => r.reporter === p.name);
     const prob = own.filter(t => t.attention).length, hp = D.helps.filter(h => h.helper === p.name && h.status !== "已解決").length;
@@ -834,10 +835,10 @@ function mReport(id) {
   if (!list.length) return toast("目前沒有可回報的工作", true);
   let t = D.taskById[id] && canReport(D.taskById[id]) ? D.taskById[id] : (list.find(x => x.owner === S.me && x.start <= TODAY) || list[0]);
   const mineFirst = list.slice().sort((a, b) => (b.owner === S.me) - (a.owner === S.me));
-  const others = D.people.map(p => p.name).filter(n => n !== S.me);
+  const others = D.staff.map(p => p.name).filter(n => n !== S.me);
   const body = `
     <div class="f"><label>工作項目</label><select name="taskId" data-act-change="rep-task">${mineFirst.map(x => `<option value="${x.id}" ${x.id === t.id ? "selected" : ""}>${esc(x.code)}　${esc(x.name)}${x.owner === S.me ? "" : S.role === "member" ? "（協辦）" : "（" + esc(x.owner) + "）"}</option>`).join("")}</select></div>
-    ${S.role === "admin" ? `<div class="f"><label>回報人</label><select name="reporter">${D.people.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
+    ${S.role === "admin" ? `<div class="f"><label>回報人</label><select name="reporter">${D.staff.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
     <div class="f"><label>目前完成度 <span class="muted">上次 ${t.progress}%</span></label>
       <div class="slider"><input type="range" name="progress" min="0" max="100" step="5" value="${t.progress}" data-act-input="rep-pg"><output id="pgv">${t.progress}%</output></div>
       <div class="quick">${[0, 25, 50, 75, 100].map(v => `<button type="button" data-act="pg" data-v="${v}">${v}%</button>`).join("")}</div></div>
@@ -861,9 +862,9 @@ function mHelp(taskId, offer) {
       `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">確認協助</button>`, "offer");
     return;
   }
-  const others = D.people.map(p => p.name).filter(n => n !== S.me);
+  const others = D.staff.map(p => p.name).filter(n => n !== S.me);
   modal("🤝 發出協助請求", `
-    ${S.role === "admin" ? `<div class="f"><label>請求人</label><select name="requester">${D.people.map(p => `<option ${t && p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
+    ${S.role === "admin" ? `<div class="f"><label>請求人</label><select name="requester">${D.staff.map(p => `<option ${t && p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
     <div class="f"><label>請誰協助？</label><div class="pick" data-pick="helper">${others.map(n => `<button type="button" data-v="${esc(n)}">${av(n)}${esc(n)}</button>`).join("")}</div></div>
     <div class="f"><label>相關工作 <span class="muted">（選填）</span></label><select name="taskId"><option value="">（不指定）</option>${D.tasks.map(x => `<option value="${x.id}" ${t && t.id === x.id ? "selected" : ""}>${esc(x.code)}　${esc(x.name)}</option>`).join("")}</select></div>
     <div class="f"><label>需要協助的內容</label><textarea name="content" placeholder="例：M6 部署網址還沒拿到，請協助提供測試環境帳號"></textarea></div>`,
@@ -887,7 +888,7 @@ function mModule(id) {
   modal(`${esc(m.id)} 模組狀態`, `
     <input type="hidden" name="id" value="${esc(m.id)}">
     ${admin ? `<div class="f"><label>模組名稱</label><input type="text" name="name" value="${esc(m.name)}"></div>
-      <div class="f"><label>負責人</label><select name="owner">${S.D.people.map(p => `<option ${p.name === m.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : `<p style="margin-top:0"><b>${esc(m.name)}</b><br><span class="muted small">負責人 ${esc(m.owner)}</span></p>`}
+      <div class="f"><label>負責人</label><select name="owner">${S.D.staff.map(p => `<option ${p.name === m.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : `<p style="margin-top:0"><b>${esc(m.name)}</b><br><span class="muted small">負責人 ${esc(m.owner)}</span></p>`}
     <div class="f"><label>資安檢測（查核點 1-1）</label>${pk("sec", SEC, m.sec)}</div>
     <div class="f"><label>未修補的 Critical／High 弱點數</label><input type="number" name="secHigh" min="0" value="${+m.secHigh || 0}" style="max-width:140px"></div>
     <div class="f"><label>雲端上架（查核點 1-2）</label>${pk("cloud", CLOUD, m.cloud)}</div>
@@ -912,7 +913,7 @@ function mTaskEdit(id) {
     <input type="hidden" name="id" value="${esc(t.id || "")}">
     <div class="grid g2" style="gap:0 14px">${inp("code", "編號", t.code)}${inp("group", "分項", t.group)}</div>
     ${inp("name", "工作項目", t.name)}${inp("deliverable", "產出／交付文件", t.deliverable)}
-    <div class="grid g2" style="gap:0 14px"><div class="f"><label>主責</label><select name="owner">${S.D.people.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+    <div class="grid g2" style="gap:0 14px"><div class="f"><label>主責</label><select name="owner">${S.D.staff.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
       ${inp("helpers", "協辦（以、分隔）", t.helpers)}${inp("start", "起始日", t.start, "date")}${inp("end", "完成日", t.end, "date")}${inp("weight", "權重 %", t.weight, "number")}${inp("checkpoint", "對應查核點", t.checkpoint)}</div>
     ${inp("note", "備註", t.note)}`,
     `${id ? `<button type="button" class="btn danger" data-act="task-del" data-id="${id}" style="margin-right:auto">刪除</button>` : ""}<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">儲存</button>`, "task");
