@@ -5,6 +5,8 @@
  */
 const SITE_URL = 'https://ai-module-tracker.vercel.app'; // 網站正式網址（產生專屬連結用）
 const OPEN_LOGIN = true; // true＝成員免密碼，登入畫面點名字即可進入（主管功能仍需主管密碼）
+const TZ = 'Asia/Taipei';
+const DIGEST_DAY = ScriptApp.WeekDay.FRIDAY, DIGEST_HOUR = 17; // 每週摘要寄送時間：週五 17:00
 
 const SHEETS = {
   tasks: {name: '工作項目', cols: ['id', 'code', 'group', 'name', 'deliverable', 'owner', 'helpers', 'start', 'end', 'weight', 'checkpoint', 'note'],
@@ -17,8 +19,8 @@ const SHEETS = {
     head: ['代號', '模組名稱', '負責人', '資安檢測(1-1)', '未修補高風險數', '雲端上架(1-2)', '備註', '更新人', '更新時間']},
   checkpoints: {name: '查核點', cols: ['id', 'due', 'title', 'target', 'current', 'auto', 'note', 'updatedBy', 'updatedAt'],
     head: ['查核點', '完成期限', '查核點概述', '目標值', '目前達成值', '自動計算來源', '備註', '更新人', '更新時間']},
-  people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link'],
-    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人密碼', '專屬連結（複製後私訊給本人）']},
+  people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email'],
+    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人密碼', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）']},
 };
 const STATUS = ['未開始', '進行中', '遇到困難', '已完成'];
 const HELP_STATUS = ['待回應', '協助中', '已解決'];
@@ -81,6 +83,8 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('專案管理')
     .addItem('初始設定（第一次使用）', 'setup')
     .addItem('補發新成員的個人密碼', 'setupPins')
+    .addSeparator()
+    .addItem('立即寄出本週摘要（測試）', 'weeklyDigest')
     .addToUi();
 }
 
@@ -88,15 +92,14 @@ function onOpen() {
 function setup() {
   const ss = SpreadsheetApp.getActive();
   const seed = {tasks: SEED_TASKS, modules: SEED_MODULES.map(m => [m[0], m[1], m[2], '未開始', 0, '未開始', '', '', '']),
-    checkpoints: SEED_CHECKPOINTS.map(c => c.concat(['', '', ''])), people: SEED_PEOPLE.map(p => p.concat(['', '']))};
+    checkpoints: SEED_CHECKPOINTS.map(c => c.concat(['', '', ''])), people: SEED_PEOPLE.map(p => p.concat(['', '', '']))};
   Object.keys(SHEETS).forEach(k => {
     const def = SHEETS[k];
     let s = ss.getSheetByName(def.name);
     if (!s) s = ss.insertSheet(def.name);
-    if (s.getLastRow() === 0) {
-      s.appendRow(def.head); s.setFrozenRows(1);
-      s.getRange(1, 1, 1, def.head.length).setFontWeight('bold').setBackground('#eef2ff');
-    }
+    // 每次都重寫表頭，新增欄位（例如人員的通知 Email）時舊試算表也會補上
+    s.getRange(1, 1, 1, def.head.length).setValues([def.head]).setFontWeight('bold').setBackground('#eef2ff');
+    s.setFrozenRows(1);
     s.getRange(1, 1, s.getMaxRows(), def.cols.length).setNumberFormat('@'); // 全部以文字儲存，避免日期／密碼被自動轉換
     if (seed[k] && s.getLastRow() < 2) s.getRange(2, 1, seed[k].length, def.cols.length).setValues(seed[k].map(r => r.map(String)));
   });
@@ -111,6 +114,12 @@ function setup() {
     c.getRange('A3:B3').setValues([['主管專屬連結', '="' + SITE_URL + '/#k="&B1']]);
     c.setColumnWidth(1, 110); c.setColumnWidth(2, 560);
   }
+  if (!String(c.getRange('A4').getDisplayValue()).trim()) {
+    c.getRange('A4:C4').setValues([['主管通知 Email', Session.getEffectiveUser().getEmail(), '← 卡關通知與每週摘要寄到這裡，多個以逗號分隔']]);
+  }
+  // 每週摘要：先移除舊的排程再建立，避免重複寄送
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'weeklyDigest').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('weeklyDigest').timeBased().onWeekDay(DIGEST_DAY).atHour(DIGEST_HOUR).inTimezone(TZ).create();
   setupPins();
 }
 
@@ -151,7 +160,7 @@ function handle_(p) {
     switch (p.action) {
       case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name}, readAll_()));
       case 'report': return locked_(() => addReport_(p.report || {}, who));
-      case 'reply': return admin ? locked_(() => patch_('reports', p.id, {reply: clean_(p.reply, 2000), replyAt: now_()})) : deny();
+      case 'reply': return admin ? locked_(() => replyReport_(p.id, p.reply)) : deny();
       case 'deleteReport': return admin ? locked_(() => deleteRow_('reports', p.id)) : deny();
       case 'saveTask': return admin ? locked_(() => saveTask_(p.task || {})) : deny();
       case 'deleteTask': return admin ? locked_(() => deleteRow_('tasks', p.id)) : deny();
@@ -206,11 +215,31 @@ function addReport_(r, who) {
   append_('reports', row);
   // 回報時勾選「需要誰協助」→ 自動建立協助請求
   const names = read_('people').map(p => p.name);
-  (Array.isArray(r.helpers) ? r.helpers : []).filter(n => names.indexOf(n) >= 0 && n !== row.reporter).forEach(n => {
+  const helpers = (Array.isArray(r.helpers) ? r.helpers : []).filter(n => names.indexOf(n) >= 0 && n !== row.reporter);
+  const helpText = clean_(r.helpText || r.issue, 2000);
+  helpers.forEach(n => {
     append_('helps', {id: Utilities.getUuid(), createdAt: now_(), taskId: task.id, requester: row.reporter, helper: n,
-      content: clean_(r.helpText || r.issue, 2000), status: '待回應', response: '', updatedAt: now_()});
+      content: helpText, status: '待回應', response: '', updatedAt: now_()});
+    notifyHelp_(row.reporter, n, task, helpText);
   });
+  if (row.status === '遇到困難') {
+    mail_(adminEmails_(), `${task.code} 遇到困難：${row.reporter}`, box_('#d92d3a',
+      `<b>${esc_(row.reporter)}</b> 回報 <b>${esc_(task.code)} ${esc_(task.name)}</b> 遇到困難（目前 ${row.progress}%）` +
+      quote_(row.issue) + (row.done ? `<p style="margin:8px 0 0">本次完成：${esc_(row.done)}</p>` : '') +
+      (helpers.length ? `<p style="margin:8px 0 0">已請 ${esc_(helpers.join('、'))} 協助</p>` : '<p style="margin:8px 0 0;color:#c27100">尚未指定協助人，可能需要主管協調。</p>') +
+      `<p style="margin:12px 0 0">登入後到「工作進度」點 ${esc_(task.code)} 即可回覆指示。</p>`));
+  }
   return out_({ok: true, id: row.id});
+}
+
+function replyReport_(id, text) {
+  const r = read_('reports').filter(x => x.id === String(id))[0];
+  if (!r) return out_({ok: false, error: '找不到這筆回報'});
+  const res = patch_('reports', r.id, {reply: clean_(text, 2000), replyAt: now_()});
+  const task = read_('tasks').filter(t => t.id === r.taskId)[0] || {code: '', name: ''};
+  mail_(emailOf_(r.reporter), `主管回覆了你的 ${task.code} 回報`, box_('#4f46e5',
+    `<b>${esc_(task.code)} ${esc_(task.name)}</b><p style="margin:8px 0 0">你的回報：${esc_(r.issue || r.done || r.next)}</p>` + quote_('主管回覆：' + text)));
+  return res;
 }
 
 function addHelp_(h, who) {
@@ -219,9 +248,20 @@ function addHelp_(h, who) {
   const helper = h.offer && who.role !== 'admin' ? who.name : String(h.helper || '');
   if (names.indexOf(requester) < 0 || names.indexOf(helper) < 0 || requester === helper) return out_({ok: false, error: '請選擇協助對象'});
   if (!String(h.content || '').trim()) return out_({ok: false, error: '請寫下需要協助的內容'});
+  const content = clean_(h.content, 2000);
   append_('helps', {id: Utilities.getUuid(), createdAt: now_(), taskId: String(h.taskId || ''), requester: requester, helper: helper,
-    content: clean_(h.content, 2000), status: h.offer ? '協助中' : '待回應', response: '', updatedAt: now_()});
+    content: content, status: h.offer ? '協助中' : '待回應', response: '', updatedAt: now_()});
+  const task = read_('tasks').filter(t => t.id === String(h.taskId || ''))[0];
+  if (h.offer) mail_(emailOf_(requester), `${helper} 主動協助你${task ? '處理 ' + task.code : ''}`,
+    box_('#15924a', `<b>${esc_(helper)}</b> 表示可以協助你${task ? '處理 <b>' + esc_(task.code + ' ' + task.name) + '</b>' : ''}` + quote_(content)));
+  else notifyHelp_(requester, helper, task, content);
   return out_({ok: true});
+}
+
+function notifyHelp_(requester, helper, task, content) {
+  mail_(emailOf_(helper), `${requester} 請你協助${task ? '：' + task.code : ''}`, box_('#c27100',
+    `<b>${esc_(requester)}</b> 請你協助${task ? '處理 <b>' + esc_(task.code + ' ' + task.name) + '</b>' : ''}` + quote_(content) +
+    '<p style="margin:12px 0 0">登入後在「我的工作」最上方按「接下協助」，處理完按「回覆／結案」。</p>'));
 }
 
 function updateHelp_(p, who) {
@@ -258,6 +298,95 @@ function saveTask_(t) {
   append_('tasks', row);
   return out_({ok: true, id: row.id});
 }
+
+/* ---------- 每週摘要（排程：週五 17:00，也可從選單手動寄出） ---------- */
+function weeklyDigest() {
+  const to = adminEmails_();
+  if (!to.length) { Logger.log('「設定」B4 沒有主管 Email，未寄出'); return; }
+  const today = ymdTz_(new Date()), weekAgo = ymdTz_(new Date(Date.now() - 7 * 864e5));
+  const d = readAll_();
+  const reports = d.reports.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const at = (t, day) => { const r = reports.filter(x => x.taskId === t.id && ymdTz_(new Date(x.createdAt)) <= day)[0]; return r ? r.progress : 0; };
+  const exp = (t, day) => day < t.start ? 0 : day >= t.end ? 100 : Math.round((dn_(day) - dn_(t.start) + 1) / (dn_(t.end) - dn_(t.start) + 1) * 100);
+  const latest = {};
+  reports.forEach(r => { if (!latest[r.taskId]) latest[r.taskId] = r; });
+  d.tasks.forEach(t => {
+    const l = latest[t.id];
+    t.progress = l ? l.progress : 0;
+    t.status = l ? (l.progress >= 100 ? '已完成' : l.status) : '未開始';
+    t.issue = l && t.status !== '已完成' ? l.issue : '';
+    t.exp = exp(t, today); t.last = l;
+  });
+  const W = d.tasks.reduce((s, t) => s + t.weight, 0) || 1;
+  const actual = d.tasks.reduce((s, t) => s + t.weight * t.progress, 0) / W;
+  const before = d.tasks.reduce((s, t) => s + t.weight * at(t, weekAgo), 0) / W;
+  const planned = d.tasks.reduce((s, t) => s + t.weight * t.exp, 0) / W;
+  const weekReps = reports.filter(r => ymdTz_(new Date(r.createdAt)) > weekAgo);
+  const active = d.tasks.filter(t => t.start <= today && t.end > weekAgo);
+  const owners = active.map(t => t.owner).filter((n, i, a) => n && a.indexOf(n) === i);
+  const silent = owners.filter(n => !weekReps.some(r => r.reporter === n));
+  const blocked = d.tasks.filter(t => t.status === '遇到困難');
+  const overdue = d.tasks.filter(t => t.status !== '已完成' && today > t.end);
+  const behind = d.tasks.filter(t => t.status !== '已完成' && today <= t.end && t.exp - t.progress >= 25);
+  const waiting = d.helps.filter(h => h.status === '待回應');
+  const nextWeek = ymdTz_(new Date(Date.now() + 7 * 864e5));
+  const due = d.tasks.filter(t => t.status !== '已完成' && t.end >= today && t.end <= nextWeek);
+  d.checkpoints.forEach(c => {
+    if (c.auto === 'sec') c.current = d.modules.filter(m => m.sec === '複測通過').length;
+    if (c.auto === 'cloud') c.current = d.modules.filter(m => m.cloud === '已上架').length;
+  });
+  const pct = v => Math.round(v) + '%', gap = actual - planned;
+  const li = arr => arr.length ? '<ul style="margin:6px 0 0;padding-left:20px">' + arr.join('') + '</ul>' : '<p style="margin:6px 0 0;color:#8a91a3">無</p>';
+  const tl = t => `<b>${esc_(t.code)}</b> ${esc_(t.name)}（${esc_(t.owner)}）`;
+  const sec = (title, color, body) => `<h3 style="margin:22px 0 4px;font-size:15px;color:${color}">${title}</h3>${body}`;
+  const html =
+    `<div style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;max-width:640px;color:#1e2433;line-height:1.6">
+     <h2 style="margin:0 0 4px">專案週報 ${md_(weekAgo)}–${md_(today)}</h2><div style="color:#8a91a3">AI模組跨領域應用推廣計畫</div>
+     <table style="margin-top:16px;border-collapse:collapse;width:100%"><tr>
+       ${[['整體完成率', pct(actual), `本週 ${actual - before >= 0 ? '+' : ''}${pct(actual - before)}`],
+          ['依時程應達', pct(planned), gap < -5 ? `<span style="color:#d92d3a">落後 ${pct(-gap)}</span>` : gap > 5 ? `<span style="color:#15924a">超前 ${pct(gap)}</span>` : '符合進度'],
+          ['本週回報', `${owners.length - silent.length}/${owners.length} 人`, `共 ${weekReps.length} 筆`],
+          ['卡關／逾期', `${blocked.length}／${overdue.length}`, `待回應協助 ${waiting.length}`]]
+         .map(k => `<td style="background:#f4f5fa;border:4px solid #fff;padding:10px;border-radius:10px;vertical-align:top"><div style="font-size:12px;color:#8a91a3">${k[0]}</div><div style="font-size:22px;font-weight:700">${k[1]}</div><div style="font-size:12px">${k[2]}</div></td>`).join('')}
+     </tr></table>` +
+    sec('查核點', '#4f46e5', li(d.checkpoints.map(c => `<li><b>${esc_(c.id)}</b>（${md_(c.due)}，剩 ${dn_(c.due) - dn_(today)} 天）${c.current}／${c.target}${c.current >= c.target ? ' ✅' : ''}</li>`))) +
+    sec('🔴 遇到困難', '#d92d3a', li(blocked.map(t => `<li>${tl(t)}：${esc_(t.issue || '（未說明）')}${t.last && t.last.reply ? '<br><span style="color:#4f46e5">主管已回覆：' + esc_(t.last.reply) + '</span>' : ''}</li>`))) +
+    sec('⏰ 逾期與落後', '#c27100', li(overdue.map(t => `<li>${tl(t)} 逾期 ${dn_(today) - dn_(t.end)} 天，${t.progress}%</li>`)
+      .concat(behind.map(t => `<li>${tl(t)} ${t.progress}%，應達 ${t.exp}%</li>`)))) +
+    sec('🙋 尚未回報（本週有進行中工作）', '#c27100', silent.length ? `<p style="margin:6px 0 0">${esc_(silent.join('、'))}</p>` : '<p style="margin:6px 0 0;color:#15924a">全員都已回報 👍</p>') +
+    sec('🤝 等待回應的協助請求', '#c27100', li(waiting.map(h => `<li>${esc_(h.requester)} → ${esc_(h.helper)}：${esc_(h.content)}</li>`))) +
+    sec('✅ 本週回報內容', '#15924a', li(weekReps.filter(r => r.done).slice(0, 25).map(r => { const t = d.tasks.filter(x => x.id === r.taskId)[0] || {code: ''}; return `<li><b>${esc_(t.code)}</b> ${esc_(r.reporter)}（${r.progress}%）：${esc_(r.done)}</li>`; }))) +
+    sec('📅 未來 7 天到期', '#4f46e5', li(due.map(t => `<li>${tl(t)} ${md_(t.end)} 到期，目前 ${t.progress}%</li>`))) +
+    `<p style="margin:26px 0 0"><a href="${SITE_URL}" style="background:#4f46e5;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none">開啟專案進度管理</a></p></div>`;
+  MailApp.sendEmail({to: to.join(','), subject: `【專案週報】${md_(weekAgo)}–${md_(today)} 完成率 ${pct(actual)}${blocked.length ? '，' + blocked.length + ' 項卡關' : ''}`,
+    htmlBody: html, name: 'AI模組推廣計畫 專案管理'});
+  Logger.log('週報已寄給 ' + to.join(','));
+}
+
+/* ---------- Email 通知 ---------- */
+function mail_(to, subject, html) {
+  to = [].concat(to).filter(x => /@/.test(String(x || '')));
+  if (!to.length) return;
+  try {
+    MailApp.sendEmail({to: to.join(','), subject: '【專案管理】' + subject, name: 'AI模組推廣計畫 專案管理',
+      htmlBody: `<div style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;max-width:600px;color:#1e2433;line-height:1.6">${html}
+        <p style="margin:20px 0 0"><a href="${SITE_URL}" style="background:#4f46e5;color:#fff;padding:9px 16px;border-radius:10px;text-decoration:none">開啟專案進度管理</a></p></div>`});
+  } catch (e) { Logger.log('寄信失敗：' + e); } // 寄信失敗不影響回報本身
+}
+function adminEmails_() {
+  const c = SpreadsheetApp.getActive().getSheetByName('設定');
+  return c ? String(c.getRange('B4').getDisplayValue()).split(/[,，;；\s]+/).filter(x => /@/.test(x)) : [];
+}
+function emailOf_(name) {
+  const p = read_('people').filter(x => x.name === name)[0];
+  return p && /@/.test(p.email || '') ? p.email : '';
+}
+function box_(color, inner) { return `<div style="border-left:4px solid ${color};padding:4px 0 4px 14px">${inner}</div>`; }
+function quote_(s) { return s ? `<div style="background:#f4f5fa;border-radius:8px;padding:8px 12px;margin-top:8px;white-space:pre-wrap">${esc_(s)}</div>` : ''; }
+function esc_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c])); }
+function ymdTz_(d) { return Utilities.formatDate(d, TZ, 'yyyy-MM-dd'); }
+function dn_(s) { return Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5; }
+function md_(s) { return +s.slice(5, 7) + '/' + +s.slice(8, 10); }
 
 /* ---------- helpers ---------- */
 function involved_(task, name) {

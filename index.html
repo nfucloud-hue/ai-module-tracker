@@ -270,7 +270,7 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 "use strict";
 /* ================= 基本設定 ================= */
 const API = String(window.API_URL || "").trim();
-const DEMO = !API;
+const DEMO = !API || /[?&]demo\b/.test(location.search); // 網址加 ?demo 可試用示範模式（資料只存在本機）
 const PROJECT = {name: "AI模組跨領域應用推廣計畫", no: "115A163-B06", start: "2026-10-01", end: "2026-11-30"};
 const MEETINGS = ["2026-10-09", "2026-10-23", "2026-11-06", "2026-11-20", "2026-11-30"];
 const STATUS = ["未開始", "進行中", "遇到困難", "已完成"];
@@ -535,6 +535,8 @@ function vHome() {
   <h2>查核點達成狀況</h2>
   <div class="grid g4">${D.checkpoints.map(cpCard).join("")}</div>
 
+  <div class="card" style="margin-top:14px">${trend()}</div>
+
   <div class="grid g2" style="margin-top:14px">
     <div class="card"><h3>需要關注 <span class="muted">${att.length ? att.length + " 項" : ""}</span></h3>
       ${att.length ? att.slice(0, 8).join("") + (att.length > 8 ? `<div style="text-align:center;margin-top:8px"><button class="link" data-act="nav" data-v="collab">查看全部 →</button></div>` : "") : `<div class="empty">目前沒有卡關或落後的工作 👍</div>`}
@@ -555,6 +557,38 @@ function vHome() {
       <div class="muted small" style="margin-top:14px">每次回報會記錄完成度、完成事項、下一步與遇到的難題；主管可直接在工作項目內回覆指示。</div>
     </div>
   </div>`;
+}
+/* 進度趨勢：每週末的「實際完成率」（依當時最新回報）對照「依時程應達」 */
+function trend() {
+  const D = S.D, g = S.trendG || "整體";
+  const ts = g === "整體" ? D.tasks : D.tasks.filter(t => t.group === g);
+  const W = ts.reduce((s, t) => s + t.weight, 0) || 1;
+  const byTask = {};
+  D.reports.forEach(r => (byTask[r.taskId] = byTask[r.taskId] || []).push(r)); // 已依時間新→舊排序
+  const actualAt = day => ts.reduce((s, t) => { const r = (byTask[t.id] || []).find(x => ymd(new Date(x.createdAt)) <= day); return s + t.weight * (r ? r.progress : 0); }, 0) / W;
+  const planAt = day => ts.reduce((s, t) => s + t.weight * (day < t.start ? 0 : day >= t.end ? 100 : (dn(day) - dn(t.start) + 1) / (dn(t.end) - dn(t.start) + 1) * 100), 0) / W;
+  const start = addDays(PROJECT.start, -1), pts = [{d: start, l: ""}].concat(WEEKS.map(w => ({d: w.e, l: "W" + w.n, s: w.s})));
+  const W0 = 640, H = 230, L = 38, R = 14, T = 14, B = 30, total = dn(PROJECT.end) - dn(start);
+  const x = d => L + (dn(d) - dn(start)) / total * (W0 - L - R), y = v => T + (1 - v / 100) * (H - T - B);
+  const plan = pts.map(p => [x(p.d), y(planAt(p.d))]);
+  const act = pts.filter(p => p.d === start || (p.s || p.d) <= TODAY).map(p => { const d = p.d > TODAY ? TODAY : p.d; return {x: x(d), y: y(actualAt(d)), v: actualAt(d), d}; });
+  const path = a => a.map((p, i) => (i ? "L" : "M") + (p.x != null ? p.x : p[0]).toFixed(1) + " " + (p.y != null ? p.y : p[1]).toFixed(1)).join(" ");
+  const last = act[act.length - 1], gap = last ? last.v - planAt(last.d) : 0;
+  const todayX = TODAY >= PROJECT.start && TODAY <= PROJECT.end ? x(TODAY) : -1;
+  const groups = ["整體"].concat(D.groups.map(x => x.name));
+  return `<div class="row between wrap" style="margin-bottom:6px"><h3 style="margin:0">進度趨勢 <span class="muted">｜實線＝實際完成率，虛線＝依時程應達</span></h3>
+      <div class="seg">${groups.map(n => `<button data-act="trend" data-v="${esc(n)}" class="${n === g ? "on" : ""}">${esc(n.replace(/^1-\d /, "").replace("模組", ""))}</button>`).join("")}</div></div>
+    <div class="muted small" style="margin-bottom:6px">${last && act.length > 1 ? `目前 <b style="color:var(--ink)">${pct(last.v)}</b>，應達 ${pct(planAt(last.d))}，` + (gap < -5 ? `<b style="color:var(--bad)">落後 ${pct(-gap)}</b>` : gap > 5 ? `<b style="color:var(--ok)">超前 ${pct(gap)}</b>` : `<b style="color:var(--ok)">符合進度</b>`) : "計畫開始後會依每週回報畫出曲線"}</div>
+    <svg viewBox="0 0 ${W0} ${H}" width="100%" style="display:block;max-height:280px" role="img" aria-label="進度趨勢圖">
+      ${[0, 25, 50, 75, 100].map(v => `<line x1="${L}" x2="${W0 - R}" y1="${y(v)}" y2="${y(v)}" stroke="#eceef5"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#8a91a3">${v}%</text>`).join("")}
+      ${pts.slice(1).map(p => `<text x="${x(p.d)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="${curWeek() && curWeek().e === p.d ? "#4f46e5" : "#8a91a3"}">${p.l}</text>`).join("")}
+      ${todayX >= 0 ? `<line x1="${todayX}" x2="${todayX}" y1="${T}" y2="${H - B}" stroke="#d92d3a" stroke-dasharray="3 3"/><text x="${todayX}" y="${T - 3}" text-anchor="middle" font-size="10" fill="#d92d3a">今天</text>` : ""}
+      <path d="${path(plan)} L ${plan[plan.length - 1][0]} ${y(0)} L ${plan[0][0]} ${y(0)} Z" fill="#8a91a3" opacity=".07"/>
+      <path d="${path(plan)}" fill="none" stroke="#8a91a3" stroke-width="2" stroke-dasharray="6 5"/>
+      ${act.length > 1 ? `<path d="${path(act)}" fill="none" stroke="${gap < -5 ? "#e59a12" : "#4f46e5"}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+        ${act.slice(1).map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#fff" stroke="${gap < -5 ? "#e59a12" : "#4f46e5"}" stroke-width="2.5"><title>${md(p.d)}：${pct(p.v)}</title></circle>`).join("")}
+        <text x="${last.x}" y="${last.y - 10}" text-anchor="${last.x > W0 - 60 ? "end" : "middle"}" font-size="12" font-weight="700" fill="${gap < -5 ? "#c27100" : "#4f46e5"}">${pct(last.v)}</text>` : ""}
+    </svg>`;
 }
 function cpCard(c) {
   const p = c.target ? Math.min(100, c.current / c.target * 100) : 0, d = left(c.due);
@@ -909,6 +943,7 @@ document.addEventListener("click", e => {
     case "demo-reset": if (confirm("要清除示範資料、還原成範例嗎？")) { try { localStorage.removeItem(DKEY); } catch (x) {} refresh(); } break;
     case "fst": S.f.st = v; render(); break;
     case "htab": S.helpTab = v; render(); break;
+    case "trend": S.trendG = v; render(); break;
     case "help-new": mHelp(id); break;
     case "help-offer": mHelp(id, true); break;
     case "help-update": mHelpUpdate(id); break;
