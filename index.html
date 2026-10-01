@@ -1032,8 +1032,10 @@ function loginView(err) {
   document.getElementById("lf").onsubmit = e => { e.preventDefault(); S.pin = new FormData(e.target).get("pin").trim(); S.as = ""; start(true); };
 }
 async function showLogin(err) {
-  if (!S.people) {
+  // 名單抓不到（例如後端正在重新部署）時重試幾次，避免成員只看到密碼畫面
+  for (let i = 0; i < 3 && !(S.people && S.people.length); i++) {
     try { const j = await call("people"); S.people = j.people || []; } catch (e) { S.people = []; }
+    if (!S.people.length && i < 2) await new Promise(r => setTimeout(r, 1500));
   }
   loginView(err);
 }
