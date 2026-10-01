@@ -336,7 +336,7 @@ async function call(action, extra) {
   if (DEMO) return demoCall(action, extra || {});
   const res = await fetch(API, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({action, pin: S.pin, as: S.as}, extra || {}))});
   const j = await res.json();
-  if (!j.ok) throw new Error(j.error === "pin" ? "密碼不正確" : j.error);
+  if (!j.ok) throw new Error(j.error === "pin" ? "密碼不正確" : j.error === "manager" ? "主管請使用自己的專屬連結登入，或輸入個人密碼" : j.error);
   return j;
 }
 async function load() {
@@ -377,7 +377,7 @@ function demoSeed() {
   return st;
 }
 function demoCall(action, p) {
-  const st = demoState(), now = new Date().toISOString(), who = S.role === "admin" ? "" : S.me;
+  const st = demoState(), now = new Date().toISOString(), who = S.role === "admin" ? "" : S.me, by = S.me || "主管";
   const id = () => Math.random().toString(36).slice(2, 10);
   const find = (arr, i) => arr.find(x => String(x.id) === String(i));
   switch (action) {
@@ -410,8 +410,8 @@ function demoCall(action, p) {
       break;
     }
     case "helpUpdate": { const h = find(st.helps, p.id); if (p.status) h.status = p.status; if (p.response != null) h.response = p.response; h.updatedAt = now; break; }
-    case "saveModule": { const m = find(st.modules, p.module.id); Object.assign(m, p.module, {updatedBy: who || "主管", updatedAt: now}); break; }
-    case "saveCheckpoint": { const c = find(st.checkpoints, p.id); c.current = Math.max(0, +p.current || 0); c.note = p.note; c.updatedBy = who || "主管"; c.updatedAt = now; break; }
+    case "saveModule": { const m = find(st.modules, p.module.id); Object.assign(m, p.module, {updatedBy: by, updatedAt: now}); break; }
+    case "saveCheckpoint": { const c = find(st.checkpoints, p.id); c.current = Math.max(0, +p.current || 0); c.note = p.note; c.updatedBy = by; c.updatedAt = now; break; }
   }
   demoSave(st);
   return {ok: true};
@@ -471,7 +471,7 @@ function navItems() {
 }
 function shell() {
   const items = navItems();
-  const me = S.role === "admin" ? "主管" : S.me;
+  const me = S.role === "admin" ? (S.me ? S.me + "（主管）" : "主管") : S.me;
   document.getElementById("app").innerHTML = `
   <header>
     <div class="bar-top">
@@ -479,7 +479,7 @@ function shell() {
       <div><div class="brand-t">專案進度管理</div><div class="brand-s">${esc(PROJECT.name)}</div></div>
       <div class="spacer"></div>
       <button class="iconbtn" data-act="refresh" title="重新整理">⟳<span class="nm-t">更新</span></button>
-      <div class="who">${S.role === "admin" ? `<span class="av" style="background:#1e2433">主管</span>` : av(me)}<span class="nm-t">${esc(me)}</span></div>
+      <div class="who">${S.role === "admin" && !S.me ? `<span class="av" style="background:#1e2433">主管</span>` : av(S.me)}<span class="nm-t">${esc(me)}</span></div>
       <button class="iconbtn" data-act="logout" title="登出">登出</button>
     </div>
     <nav class="tabs">${items.map(i => `<button data-act="nav" data-v="${i[0]}" class="${S.view === i[0] ? "on" : ""}">${svg(i[2])}${i[1]}${i[3] ? `<span class="cnt">${i[3]}</span>` : ""}</button>`).join("")}</nav>
@@ -774,7 +774,7 @@ function vPeople() {
     const avg = own.length ? stat(own).actual : 0;
     const tc = t => `<span class="tchip clickable" data-act="task" data-id="${t.id}"><span class="d" style="background:${t.status === "已完成" ? "var(--ok)" : t.attention ? "var(--bad)" : t.status === "進行中" ? "var(--run)" : "#c9cdd8"}"></span>${esc(t.code)}</span>`;
     return `<div class="card person">
-      <div class="hd">${av(p.name, "lg")}<div style="flex:1"><div class="nm">${esc(p.name)}</div><div class="small muted">${esc(p.title)} · 本區間 ${p.pm} 人月</div></div></div>
+      <div class="hd">${av(p.name, "lg")}<div style="flex:1"><div class="nm">${esc(p.name)}</div><div class="small muted">${esc(p.title)}${p.pm ? " · 本區間 " + p.pm + " 人月" : ""}${p.manager ? ' <span class="chip nodot s-brand">主管</span>' : ""}</div></div></div>
       <div class="small" style="color:var(--ink2)">${esc(p.focus)}</div>
       <div class="stat3"><div><b>${pct(avg)}</b><span>主責完成率</span></div><div><b style="color:${prob ? "var(--bad)" : "inherit"}">${prob}</b><span>需注意</span></div><div><b>${hp}</b><span>協助他人中</span></div></div>
       <div class="small muted">主責 ${own.length} 項</div><div class="tlist">${own.map(tc).join("") || '<span class="small muted">—</span>'}</div>
@@ -1007,8 +1007,8 @@ function loginView(err) {
   if (DEMO) {
     app.innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
       <div class="muted small">${esc(PROJECT.name)}<br><b style="color:var(--warn)">示範模式</b>：選一個身分試用（正式版每人用自己的專屬連結登入）</div>
-      <div class="who-list"><button class="admin" data-login="">以「主管」身分查看</button>${window.SEED.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}</span></span></button>`).join("")}</div></div></div>`;
-    app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => { S.me = b.dataset.login; S.role = S.me ? "member" : "admin"; try { localStorage.setItem("pm-demo-who", S.me || "@admin"); } catch (e) {} start(); });
+      <div class="who-list"><button class="admin" data-login="">以「主管」身分查看</button>${window.SEED.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}${p.manager ? " · 主管" : ""}</span></span></button>`).join("")}</div></div></div>`;
+    app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => { S.me = b.dataset.login; const p = window.SEED.people.find(x => x.name === S.me); S.role = !S.me || (p && p.manager) ? "admin" : "member"; try { localStorage.setItem("pm-demo-who", S.me || "@admin"); } catch (e) {} start(); });
     return;
   }
   const pinForm = (open) => `<form id="lf" class="${open ? "" : "hidden"}" style="margin-top:16px">
@@ -1019,10 +1019,18 @@ function loginView(err) {
     // 成員免密碼：點名字直接進入；主管另用密碼
     app.innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
       <div class="muted small">${esc(PROJECT.name)}<br>請點選你的名字進入</div>
-      <div class="who-list">${S.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}</span></span></button>`).join("")}</div>
+      <div class="who-list">${S.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}${p.manager ? " · 主管" : ""}</span></span></button>`).join("")}</div>
       ${errHtml}
-      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /密碼/.test(err))}</div></div>`;
-    app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => { S.as = b.dataset.login; S.pin = ""; try { localStorage.setItem("pm-as", S.as); } catch (e) {} start(); });
+      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /密碼|主管/.test(err))}</div></div>`;
+    app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => {
+      const p = S.people.find(x => x.name === b.dataset.login);
+      if (p && p.manager) { // 主管不能只點名字登入
+        const f = document.getElementById("lf"); f.classList.remove("hidden");
+        f.querySelector("label").textContent = p.name + "（主管）請輸入個人密碼，或直接使用專屬連結";
+        f.querySelector("input").focus(); return;
+      }
+      S.as = b.dataset.login; S.pin = ""; try { localStorage.setItem("pm-as", S.as); } catch (e) {} start();
+    });
     document.getElementById("adm").onclick = () => document.getElementById("lf").classList.toggle("hidden");
   } else {
     app.innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
@@ -1055,7 +1063,7 @@ async function start(fromForm) {
 (function init() {
   if (DEMO) {
     let w = null; try { w = localStorage.getItem("pm-demo-who"); } catch (e) {}
-    if (w) { S.me = w === "@admin" ? "" : w; S.role = S.me ? "member" : "admin"; return start(); }
+    if (w) { S.me = w === "@admin" ? "" : w; const p = window.SEED.people.find(x => x.name === S.me); S.role = !S.me || (p && p.manager) ? "admin" : "member"; return start(); }
     return loginView();
   }
   const k = /(?:^#|&)k=([^&]+)/.exec(location.hash);

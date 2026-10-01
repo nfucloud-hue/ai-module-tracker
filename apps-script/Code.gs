@@ -19,8 +19,8 @@ const SHEETS = {
     head: ['代號', '模組名稱', '負責人', '資安檢測(1-1)', '未修補高風險數', '雲端上架(1-2)', '備註', '更新人', '更新時間']},
   checkpoints: {name: '查核點', cols: ['id', 'due', 'title', 'target', 'current', 'auto', 'note', 'updatedBy', 'updatedAt'],
     head: ['查核點', '完成期限', '查核點概述', '目標值', '目前達成值', '自動計算來源', '備註', '更新人', '更新時間']},
-  people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email'],
-    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人密碼', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）']},
+  people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email', 'role'],
+    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人密碼', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）', '角色（主管／空白＝成員）']},
 };
 const STATUS = ['未開始', '進行中', '遇到困難', '已完成'];
 const HELP_STATUS = ['待回應', '協助中', '已解決'];
@@ -41,18 +41,19 @@ const SEED_TASKS = [
   ['b5', 'B5', '1-2 模組上架', '上架素材製作(模組說明頁、操作手冊、示範影片)', '上架素材檔(9套)', '周芷涵', '林永祥', '2026-10-26', '2026-11-22', 5, '1-2', ''],
   ['b6', 'B6', '1-2 模組上架', '正式送審、上架掛載與連結確認', '9項模組上架截圖與網址清單', '莊嘉雲', '郭泰均、蘇順豐', '2026-11-16', '2026-11-30', 6, '1-2', '查核點 1-2 交付'],
   ['c1', 'C1', '1-3 模組擴散應用', '12項GAI模組推廣型錄、應用情境與簡報彙編', '推廣型錄暨簡報', '周芷涵', '林永祥', '2026-10-01', '2026-10-18', 3, '1-3', ''],
-  ['c2', 'C2', '1-3 模組擴散應用', '目標工具機廠名單建立與洽談簽署(≥2家)', '合作意向書／參與同意書', '覺文郁', '莊嘉雲', '2026-10-05', '2026-10-25', 4, '1-3', ''],
+  ['c2', 'C2', '1-3 模組擴散應用', '目標工具機廠名單建立與洽談簽署(≥2家)', '合作意向書／參與同意書', '專案管理者', '莊嘉雲', '2026-10-05', '2026-10-25', 4, '1-3', ''],
   ['c3', 'C3', '1-3 模組擴散應用', '終端擴散企業名單開發與邀約(累計≥25家)', '擴散企業名冊', '莊嘉雲', '周芷涵、林永祥', '2026-10-12', '2026-11-22', 5, '1-3', ''],
-  ['c4', 'C4', '1-3 模組擴散應用', '工具機廠導入需求訪談與模組媒合、技術輔導', '需求訪談暨媒合紀錄', '覺文郁', '郭泰均', '2026-10-26', '2026-11-22', 4, '1-3', ''],
+  ['c4', 'C4', '1-3 模組擴散應用', '工具機廠導入需求訪談與模組媒合、技術輔導', '需求訪談暨媒合紀錄', '專案管理者', '郭泰均', '2026-10-26', '2026-11-22', 4, '1-3', ''],
   ['c5', 'C5', '1-3 模組擴散應用', '推廣說明會／成果展示會辦理(2場)', '會議簽到表、照片、問卷', '周芷涵', '林永祥、莊嘉雲', '2026-11-02', '2026-11-29', 5, '1-3', ''],
   ['c6', 'C6', '1-3 模組擴散應用', '導入案例紀錄與擴散家數統計表建置', '擴散家數統計表暨案例集', '林永祥', '莊嘉雲', '2026-11-09', '2026-11-30', 3, '1-3', '為 12/10 查核點預備'],
-  ['m1', 'M1', '計畫管理', '雙週進度管控會議(10/9、10/23、11/6、11/20、11/30)', '會議紀錄', '蘇順豐', '覺文郁、郭泰均、許禮維、王振宇、莊嘉雲、周芷涵、林永祥', '2026-10-01', '2026-11-30', 2, '', ''],
+  ['m1', 'M1', '計畫管理', '雙週進度管控會議(10/9、10/23、11/6、11/20、11/30)', '會議紀錄', '專案管理者', '郭泰均、許禮維、王振宇、莊嘉雲、周芷涵、林永祥', '2026-10-01', '2026-11-30', 2, '', ''],
   ['m2', 'M2', '計畫管理', '經費執行管控(材料費115萬／代辦加工45萬／業務費)與核銷', '經費執行進度表', '莊嘉雲', '林永祥', '2026-10-01', '2026-11-30', 2, '', ''],
   ['m3', 'M3', '計畫管理', '查核點佐證文件彙整與期末報告初稿準備', '查核點佐證資料夾', '林永祥', '周芷涵', '2026-11-16', '2026-11-30', 2, '', ''],
 ];
 const SEED_PEOPLE = [
-  ['蘇順豐', '計畫主持人', 1.6, '計畫整體規劃、跨單位協調、查核點核定、成果對外代表'],
-  ['覺文郁', '共同主持人', 1.6, '工具機廠洽談與擴散策略、技術審查、產學媒合'],
+  ['蘇順豐', '計畫主持人', 1.6, '計畫整體規劃、跨單位協調、查核點核定、成果對外代表', '主管'],
+  ['覺文郁', '共同主持人', 1.6, '工具機廠洽談與擴散策略、技術審查、產學媒合', '主管'],
+  ['專案管理者', '專案管理者', 0, '雙週進度管控會議、工具機廠洽談與導入訪談'],
   ['郭泰均', '助理研究員', 1.3, '模組1–5資安檢測與部署、檢測報告彙整'],
   ['許禮維', '助理研究員', 1.3, '檢測環境建置、模組6–9資安檢測與部署'],
   ['王振宇', '助理研究員', 1.3, '弱點修補、雲端功能驗證與操作測試'],
@@ -83,6 +84,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('專案管理')
     .addItem('初始設定（第一次使用）', 'setup')
     .addItem('補發新成員的個人密碼', 'setupPins')
+    .addItem('套用：蘇、覺老師改主管／新增專案管理者', 'migrateManagers')
     .addSeparator()
     .addItem('立即寄出本週摘要（測試）', 'weeklyDigest')
     .addToUi();
@@ -92,7 +94,7 @@ function onOpen() {
 function setup() {
   const ss = SpreadsheetApp.getActive();
   const seed = {tasks: SEED_TASKS, modules: SEED_MODULES.map(m => [m[0], m[1], m[2], '未開始', 0, '未開始', '', '', '']),
-    checkpoints: SEED_CHECKPOINTS.map(c => c.concat(['', '', ''])), people: SEED_PEOPLE.map(p => p.concat(['', '', '']))};
+    checkpoints: SEED_CHECKPOINTS.map(c => c.concat(['', '', ''])), people: SEED_PEOPLE.map(p => p.slice(0, 4).concat(['', '', '', p[4] || '']))};
   Object.keys(SHEETS).forEach(k => {
     const def = SHEETS[k];
     let s = ss.getSheetByName(def.name);
@@ -120,6 +122,24 @@ function setup() {
   // 每週摘要：先移除舊的排程再建立，避免重複寄送
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'weeklyDigest').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('weeklyDigest').timeBased().onWeekDay(DIGEST_DAY).atHour(DIGEST_HOUR).inTimezone(TZ).create();
+  setupPins();
+}
+
+/** 一次性調整（2026-10）：蘇順豐、覺文郁改為主管；新增「專案管理者」接手 M1、C2、C4。可重複執行。 */
+function migrateManagers() {
+  setup(); // 補上新欄位表頭
+  const ps = SpreadsheetApp.getActive().getSheetByName(SHEETS.people.name), pc = SHEETS.people.cols;
+  const names = ps.getRange(2, 1, Math.max(1, ps.getLastRow() - 1), 1).getDisplayValues().map(r => r[0].trim());
+  ['蘇順豐', '覺文郁'].forEach(n => { const i = names.indexOf(n); if (i >= 0) ps.getRange(i + 2, pc.indexOf('role') + 1).setValue('主管'); });
+  if (names.indexOf('專案管理者') < 0) append_('people', {name: '專案管理者', title: '專案管理者', pm: '0', focus: '雙週進度管控會議、工具機廠洽談與導入訪談'});
+  const ts = SpreadsheetApp.getActive().getSheetByName(SHEETS.tasks.name), tc = SHEETS.tasks.cols;
+  read_('tasks').forEach(t => {
+    if (['m1', 'c2', 'c4'].indexOf(t.id) >= 0 && (t.owner === '蘇順豐' || t.owner === '覺文郁')) {
+      const r = findRow_('tasks', t.id);
+      ts.getRange(r, tc.indexOf('owner') + 1).setValue('專案管理者');
+      if (t.id === 'm1') ts.getRange(r, tc.indexOf('helpers') + 1).setValue(names.filter(n => n && n !== '蘇順豐' && n !== '覺文郁' && n !== '專案管理者').join('、'));
+    }
+  });
   setupPins();
 }
 
@@ -152,8 +172,9 @@ function doPost(e) {
 function handle_(p) {
   try {
     if (p.action === 'people') // 登入畫面用的名單（不含密碼）
-      return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').map(x => ({name: x.name, title: x.title})) : []});
+      return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').map(x => ({name: x.name, title: x.title, manager: isMgr_(x)})) : []});
     const who = auth_(p.pin, p.as);
+    if (who && who.manager) return out_({ok: false, error: 'manager'});
     if (!who) return out_({ok: false, error: 'pin'});
     const admin = who.role === 'admin';
     const deny = () => out_({ok: false, error: '只有主管可以執行這個動作'});
@@ -181,13 +202,15 @@ function auth_(pin, as) {
   if (pin && pin === adminPin_()) return {role: 'admin', name: ''};
   const people = read_('people');
   const p = pin ? people.filter(x => String(x.pin).trim() === pin)[0] : null;
-  if (p) return {role: 'member', name: p.name};
+  if (p) return {role: isMgr_(p) ? 'admin' : 'member', name: p.name}; // 角色為「主管」者用個人密碼／專屬連結登入即有主管權限
   const n = OPEN_LOGIN && as ? people.filter(x => x.name === String(as).trim())[0] : null;
+  if (n && isMgr_(n)) return {manager: true}; // 主管不能只點名字登入，避免被冒用
   return n ? {role: 'member', name: n.name} : null;
 }
+function isMgr_(p) { return String(p.role || '').trim() === '主管'; }
 
 function readAll_() {
-  const people = read_('people').map(p => ({name: p.name, title: p.title, pm: Number(p.pm) || 0, focus: p.focus}));
+  const people = read_('people').map(p => ({name: p.name, title: p.title, pm: Number(p.pm) || 0, focus: p.focus, manager: isMgr_(p)}));
   return {
     tasks: read_('tasks').map(t => Object.assign(t, {weight: Number(t.weight) || 0})),
     reports: read_('reports').map(r => Object.assign(r, {progress: Number(r.progress) || 0})),
