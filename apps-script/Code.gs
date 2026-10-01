@@ -172,7 +172,7 @@ function doPost(e) {
 function handle_(p) {
   try {
     if (p.action === 'people') // 登入畫面用的名單（不含密碼）
-      return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').map(x => ({name: x.name, title: x.title, manager: isMgr_(x)})) : []});
+      return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').filter(x => !isMgr_(x)).map(x => ({name: x.name, title: x.title})) : []});
     const who = auth_(p.pin, p.as);
     if (!who) return out_({ok: false, error: 'pin'});
     const admin = who.role === 'admin';
@@ -205,8 +205,7 @@ function auth_(pin, as) {
   const p = pin ? people.filter(x => String(x.pin).trim() === pin)[0] : null;
   if (p) return {role: isMgr_(p) ? 'admin' : 'member', name: p.name}; // 角色為「主管」者用個人密碼／專屬連結登入即有主管權限
   const n = OPEN_LOGIN && as ? people.filter(x => x.name === String(as).trim())[0] : null;
-  if (n && isMgr_(n)) return {role: 'admin', name: n.name, limited: true}; // 主管點名字即可進入，但不能刪除／修改工作項目
-  return n ? {role: 'member', name: n.name} : null;
+  return n && !isMgr_(n) ? {role: 'member', name: n.name} : null; // 主管不能只用姓名登入，須用個人專屬連結（防冒名）
 }
 function isMgr_(p) { return String(p.role || '').trim() === '主管'; }
 
