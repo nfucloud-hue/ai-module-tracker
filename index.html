@@ -103,6 +103,8 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .att .ic{width:8px;height:8px;border-radius:50%;margin-top:8px;flex:none}
 .att .m{flex:1;min-width:0}
 .att .t1{font-weight:500}
+.att .ok-btn{flex:none;align-self:center;color:var(--ok);border-color:#bfe6cc}
+.att .ok-btn:hover{background:var(--ok-soft)}
 .att .t2{font-size:13.5px;color:var(--ink2);margin-top:2px}
 .grp{margin-bottom:14px}.grp:last-child{margin-bottom:0}
 .grp .row{margin-bottom:6px;font-size:14px}
@@ -651,9 +653,9 @@ function vHome() {
   const duty = dutyOn(TODAY), logged = duty.filter(n => loggedOn(n, TODAY));
   const blocked = D.tasks.filter(t => t.blocked), overdue = D.tasks.filter(t => t.overdue && !t.blocked);
   const waiting = D.helps.filter(h => h.status === "待回應");
-  const att = blocked.map(t => `<div class="att clickable" data-act="task" data-id="${t.id}"><span class="ic" style="background:var(--bad)"></span><div class="m"><div class="t1">${esc(t.code)} ${esc(t.name)} <span class="muted small">· ${esc(t.owner)}</span></div><div class="t2" style="color:var(--bad)">${esc(t.issue || "遇到困難")}</div></div></div>`)
+  const att = blocked.map(t => `<div class="att clickable" data-act="task" data-id="${t.id}"><span class="ic" style="background:var(--bad)"></span><div class="m"><div class="t1">${esc(t.code)} ${esc(t.name)} <span class="muted small">· ${esc(t.owner)}</span></div><div class="t2" style="color:var(--bad)">${esc(t.issue || "遇到困難")}</div></div>${S.role === "admin" || t.owner === S.me ? `<button class="btn sm ghost ok-btn" data-act="resolve" data-kind="task" data-id="${t.id}">✓ 已解決</button>` : ""}</div>`)
     .concat(overdue.map(t => `<div class="att clickable" data-act="task" data-id="${t.id}"><span class="ic" style="background:var(--bad)"></span><div class="m"><div class="t1">${esc(t.code)} ${esc(t.name)} <span class="muted small">· ${esc(t.owner)}</span></div><div class="t2">已逾期 ${-left(t.end)} 天，目前 ${t.progress}%</div></div></div>`))
-    .concat(waiting.map(h => `<div class="att"><span class="ic" style="background:#e59a12"></span><div class="m"><div class="t1">${esc(h.requester)} 請 ${esc(h.helper)} 協助</div><div class="t2">${esc(h.content)} · ${ago(h.createdAt)}</div></div></div>`));
+    .concat(waiting.map(h => `<div class="att"><span class="ic" style="background:#e59a12"></span><div class="m"><div class="t1">${esc(h.requester)} 請 ${esc(h.helper)} 協助</div><div class="t2">${esc(h.content)} · ${ago(h.createdAt)}</div></div>${S.role === "admin" || S.me === h.requester || S.me === h.helper ? `<button class="btn sm ghost ok-btn" data-act="resolve" data-kind="help" data-id="${h.id}">✓ 已解決</button>` : ""}</div>`));
   const gap = D.all.actual - D.all.exp;
   return `
   <div class="row between wrap" style="margin-bottom:16px;gap:14px">
@@ -867,6 +869,18 @@ function mHelp(taskId, offer) {
     `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">送出請求</button>`, "help");
 }
 
+function mResolve(kind, id) {
+  const t = kind === "task" ? S.D.taskById[id] : null, h = kind === "help" ? S.D.helps.find(x => x.id === id) : null;
+  if (!t && !h) return;
+  modal("標記為已解決", `
+    <input type="hidden" name="kind" value="${kind}"><input type="hidden" name="id" value="${esc(id)}">
+    <p style="margin-top:0">${t ? `<b>${esc(t.code)} ${esc(t.name)}</b>（${esc(t.owner)}）` : `<b>${esc(h.requester)}</b> 請 <b>${esc(h.helper)}</b> 協助`}</p>
+    <div class="q" style="background:#fbfbfd;border:1px solid var(--line2);border-radius:10px;padding:8px 12px;margin-bottom:14px;white-space:pre-wrap;color:var(--bad)">${esc(t ? t.issue : h.content)}</div>
+    <div class="f"><label>怎麼解決的？ <span class="muted">（選填，會記在${t ? "工作日誌" : "協助紀錄"}裡）</span></label><textarea name="note" placeholder="例：已請 IT 建立 M8 測試帳號"></textarea></div>
+    <div class="muted small">${t ? "會新增一筆日誌「✔ 問題已解決」，完成度維持 " + t.progress + "%，工作恢復為進行中。" : "協助請求會標記為「已解決」。"}</div>`,
+    `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">✓ 確認已解決</button>`, "resolve");
+}
+
 function mHelpUpdate(id) {
   const h = S.D.helps.find(x => x.id === id);
   modal("更新協助狀態", `
@@ -956,6 +970,7 @@ document.addEventListener("click", e => {
     case "logtoggle": { const row = document.querySelector(`.logrow[data-task="${id}"]`); row.classList.toggle("on"); if (row.classList.contains("on")) row.querySelector("textarea").focus(); dailyHint(); break; }
     case "pgadd": { const r = document.querySelector(`[name="progress_${id}"]`); r.value = +v === 100 ? 100 : Math.min(100, +r.value + +v); logPg(r); break; }
     case "trange": S.teamRange = v; render(); break;
+    case "resolve": mResolve(el.dataset.kind, id); break;
   }
 });
 function dailyHint() {
@@ -1006,6 +1021,13 @@ document.addEventListener("submit", e => {
     if (!fd.done.trim()) return toast("請寫下今天的工作內容", true);
     if (helpers.length && !fd.issue.trim()) return toast("請說明需要協助的問題", true);
     act("report", {report: Object.assign(fd, {helpers, progress, next: "", status: progress >= 100 ? "已完成" : fd.issue.trim() ? "遇到困難" : "進行中"})}, helpers.length ? `已記錄，並通知 ${helpers.join("、")} 協助` : "日誌已記錄，辛苦了！");
+  } else if (kind === "resolve") {
+    const note = (fd.note || "").trim();
+    if (fd.kind === "help") act("helpUpdate", {id: fd.id, status: "已解決", response: note || undefined}, "已標記為已解決");
+    else {
+      const t = S.D.taskById[fd.id];
+      act("report", {report: {taskId: t.id, reporter: t.owner, progress: t.progress, status: "進行中", done: "✔ 問題已解決" + (note ? "：" + note : ""), next: "", issue: "", helpers: []}}, "已標記為已解決");
+    }
   } else if (kind === "help") {
     const helper = picked(form, "helper")[0];
     if (!helper) return toast("請選擇要請誰協助", true);
