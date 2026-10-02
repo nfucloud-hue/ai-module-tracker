@@ -426,7 +426,8 @@ const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 async function call(action, extra) {
   if (DEMO) return demoCall(action, extra || {});
   const res = await fetch(API, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({action, pin: S.pin, as: S.as}, extra || {}))});
-  const j = await res.json();
+  let j;
+  try { j = await res.json(); } catch (e) { throw new Error("後端暫時無回應"); }
   if (!j.ok) throw new Error(j.error === "pin" ? (S.as && !S.pin ? "系統已改為專屬連結登入，請使用計畫管理者私訊給你的連結開啟" : "金鑰不正確或已失效，請向計畫管理者索取新的專屬連結") : j.error);
   return j;
 }
@@ -1359,9 +1360,17 @@ async function start(fromForm) {
     S.view = navItems().some(i => i[0] === v) ? v : navItems()[0][0];
     render();
   } catch (e) {
+    const authErr = /金鑰|專屬連結/.test(e.message);
+    if (!authErr) { // 連線問題（例如 Google 正在更新程式）：保留登入，顯示重試
+      document.getElementById("app").innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
+        <div class="notice" style="margin:18px 0 12px;line-height:1.7">暫時連不上資料庫，可能是系統正在更新，請稍候再試。${/嘗試次數/.test(e.message) ? "<br>" + esc(e.message) : ""}</div>
+        <button class="btn" style="width:100%" id="retry">重試</button></div></div>`;
+      document.getElementById("retry").onclick = () => { document.getElementById("app").innerHTML = '<div class="loading"><div><div class="spin"></div>載入中…</div></div>'; start(fromForm); };
+      return;
+    }
     try { localStorage.removeItem("pm-pin"); localStorage.removeItem("pm-as"); } catch (x) {}
     S.pin = ""; S.as = "";
-    showLogin(/金鑰|專屬連結|嘗試次數/.test(e.message) ? e.message : "連線失敗：" + e.message);
+    showLogin(e.message);
   }
 }
 (function init() {
