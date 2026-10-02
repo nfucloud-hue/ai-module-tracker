@@ -211,6 +211,7 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .evbox{background:#fafbfd;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:18px}
 .ev-item{display:flex;gap:10px;align-items:center;padding:5px 0;font-size:14px;border-bottom:1px dashed var(--line2)}
 .ev-item a{color:var(--brand);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up-btn{cursor:pointer;margin-top:10px}
 .ev-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px;margin-top:10px}
 .ev-add .inp{padding:7px 10px;font-size:14px}
 .ev-task{padding:10px 0;border-top:1px solid var(--line2)}
@@ -527,6 +528,7 @@ function demoCall(action, p) {
       (st.evidence = st.evidence || []).push({id: id(), taskId: t.id, title: e.title.trim(), url: e.url.trim(), addedBy: S.me || "主管", addedAt: now});
       break;
     }
+    case "uploadEvidence": throw new Error("示範模式無法上傳檔案（正式版才可使用）");
     case "deleteEvidence": st.evidence = (st.evidence || []).filter(e => e.id !== p.id); break;
     case "packEvidence": throw new Error("示範模式無法打包到 Google Drive（正式版才可使用）");
     case "saveBudget": { const b = find(st.budget, p.budget.id); b.spent = Math.max(0, Math.round(+p.budget.spent || 0)); b.note = p.budget.note; b.updatedBy = S.me || "主管"; b.updatedAt = now; break; }
@@ -994,8 +996,9 @@ function evBox(t) {
     ${t.ev.length ? t.ev.map(e => `<div class="ev-item">${evLink(e)}<span class="muted small nowrap">${esc(e.addedBy)} · ${md(ymd(new Date(e.addedAt)))}</span>
       ${(S.role === "admin" && !S.limited) || e.addedBy === S.me ? `<button type="button" class="link small" style="color:var(--muted)" data-act="ev-del" data-id="${e.id}" data-v="${t.id}">刪除</button>` : ""}</div>`).join("")
       : `<div class="small" style="color:var(--warn);margin-bottom:6px">尚未提供佐證${t.status === "已完成" ? "（工作已完成，請補上）" : ""}</div>`}
-    ${canEv(t) ? `<div class="ev-add"><input class="inp" id="ev-title" placeholder="檔案名稱（例：資安檢測報告 v1.pdf）"><input class="inp" id="ev-url" placeholder="貼上連結（Google Drive、PDF、截圖網址）"><button type="button" class="btn sm" data-act="ev-add" data-id="${t.id}">新增</button></div>
-      <div class="muted small" style="margin-top:6px">Google Drive 檔案請設為「知道連結的使用者可檢視」或共用給計畫管理者，打包時才能複製。</div>` : ""}
+    ${canEv(t) ? `<label class="btn up-btn"><input type="file" id="ev-file" data-id="${t.id}" multiple hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.zip,.txt,.csv,.mp4">⬆ 上傳檔案</label><span class="muted small" style="margin-left:8px">可一次選多個，每個 20 MB 以內</span>
+      <details class="issue-d"><summary>或貼上雲端連結</summary><div class="ev-add"><input class="inp" id="ev-title" placeholder="檔案名稱（例：資安檢測報告 v1.pdf）"><input class="inp" id="ev-url" placeholder="貼上連結（Google Drive、PDF、截圖網址）"><button type="button" class="btn sm" data-act="ev-add" data-id="${t.id}">新增</button></div>
+      <div class="muted small" style="margin-top:6px">Google Drive 檔案請設為「知道連結的使用者可檢視」或共用給計畫管理者，打包時才能複製。</div></details>` : ""}
   </div>`;
 }
 
@@ -1222,6 +1225,27 @@ async function submitDaily(reps) {
   } catch (e) { toast(e.message || "送出失敗，請稍後再試", true); dailyHint(); }
   finally { S.busy = false; }
 }
+/* 直接上傳佐證檔案：逐一讀檔轉 base64 送到後端 */
+function fileB64(f) { return new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(new Error("讀取檔案失敗")); r.readAsDataURL(f); }); }
+async function uploadFiles(taskId, files) {
+  const big = files.filter(f => f.size > 20 * 1024 * 1024);
+  if (big.length) return toast(`${big.map(f => f.name).join("、")} 超過 20 MB，請壓縮或改貼雲端連結`, true);
+  if (S.busy) return;
+  busy(true);
+  const lbl = document.querySelector(".up-btn");
+  let done = 0;
+  try {
+    for (const f of files) {
+      if (lbl) lbl.lastChild.textContent = `上傳中 ${done + 1}／${files.length}…`;
+      await call("uploadEvidence", {file: {taskId, name: f.name, title: f.name, mime: f.type, data: await fileB64(f)}});
+      done++;
+    }
+    await load(); render(); mTask(taskId); toast(`已上傳 ${done} 個檔案`);
+  } catch (e) {
+    toast((done ? `已上傳 ${done} 個，` : "") + (e.message || "上傳失敗"), true);
+    if (done) { await load(); render(); mTask(taskId); }
+  } finally { busy(false); }
+}
 function setPg(v) { const r = document.querySelector('[name="progress"]'); if (r) { r.value = v; document.getElementById("pgv").textContent = v + "%"; } }
 document.addEventListener("input", e => {
   if (e.target.dataset.actInput === "rep-pg") document.getElementById("pgv").textContent = e.target.value + "%";
@@ -1230,6 +1254,7 @@ document.addEventListener("input", e => {
   if (fil === "q") { S.f.q = e.target.value; clearTimeout(S.qt); S.qt = setTimeout(() => { render(); const q = document.querySelector('[data-fil="q"]'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); }
 });
 document.addEventListener("change", e => {
+  if (e.target.id === "ev-file" && e.target.files.length) { uploadFiles(e.target.dataset.id, [...e.target.files]); return; }
   if (e.target.dataset.fil === "who") { S.f.who = e.target.value; render(); }
   if (e.target.dataset.actChange === "rep-task") mReport(e.target.value);
   if (e.target.dataset.actChange === "mm-month") mManMonths(e.target.value);

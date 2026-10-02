@@ -223,6 +223,7 @@ function handle_(p) {
       case 'helpUpdate': return locked_(() => updateHelp_(p, who));
       case 'saveModule': return locked_(() => saveModule_(p.module || {}, who));
       case 'addEvidence': return locked_(() => addEvidence_(p.evidence || {}, who));
+      case 'uploadEvidence': return uploadEvidence_(p.file || {}, who);
       case 'deleteEvidence': return locked_(() => deleteEvidence_(p.id, who, full));
       case 'packEvidence': return full ? packEvidence_(p.checkpoint) : admin ? denyFull() : deny();
       case 'saveCheckpoint': return locked_(() => patch_('checkpoints', p.id, {current: String(Math.max(0, Number(p.current) || 0)), note: clean_(p.note, 300), updatedBy: who.name || '主管', updatedAt: now_()}));
@@ -515,6 +516,32 @@ function addEvidence_(e, who) {
   append_('evidence', {id: Utilities.getUuid(), taskId: task.id, title: clean_(e.title, 120), url: url,
     addedBy: who.name || '主管', addedAt: now_()});
   return out_({ok: true});
+}
+/** 直接上傳佐證：存到「AI模組推廣計畫_佐證檔案／查核點／工作」資料夾，設為知道連結者可檢視，並自動加入佐證清單 */
+const UPLOAD_MAX = 20 * 1024 * 1024;
+function uploadEvidence_(f, who) {
+  const task = read_('tasks').filter(t => t.id === String(f.taskId))[0];
+  if (!task) return out_({ok: false, error: '找不到這個工作項目'});
+  if (who.role !== 'admin' && task.owner !== who.name) return out_({ok: false, error: '只有主責人可以上傳佐證'});
+  const data = String(f.data || '');
+  if (!data) return out_({ok: false, error: '沒有收到檔案內容'});
+  if (data.length * 3 / 4 > UPLOAD_MAX) return out_({ok: false, error: '檔案超過 20 MB，請壓縮或改貼雲端連結'});
+  const name = String(f.name || '佐證檔案').replace(/[\\/:*?"<>|]/g, '_').slice(0, 150);
+  const blob = Utilities.newBlob(Utilities.base64Decode(data), String(f.mime || 'application/octet-stream'), name);
+  const file = evidenceFolder_(task).createFile(blob);
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* 網域政策不允許時維持私人 */ }
+  locked_(() => append_('evidence', {id: Utilities.getUuid(), taskId: task.id, title: clean_(f.title || name, 120), url: file.getUrl(),
+    addedBy: who.name || '主管', addedAt: now_()}));
+  return out_({ok: true, url: file.getUrl()});
+}
+function evidenceFolder_(task) {
+  const props = PropertiesService.getScriptProperties();
+  let root = null;
+  try { root = props.getProperty('evidenceRoot') ? DriveApp.getFolderById(props.getProperty('evidenceRoot')) : null; } catch (e) { root = null; }
+  if (!root || root.isTrashed()) { root = DriveApp.createFolder('AI模組推廣計畫_佐證檔案'); props.setProperty('evidenceRoot', root.getId()); }
+  const sub = (parent, n) => { const it = parent.getFoldersByName(n); return it.hasNext() ? it.next() : parent.createFolder(n); };
+  const cp = sub(root, task.checkpoint ? '查核點' + task.checkpoint : '計畫管理');
+  return sub(cp, (task.code + '_' + task.name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 80));
 }
 function deleteEvidence_(id, who, full) {
   const e = read_('evidence').filter(x => x.id === String(id))[0];
