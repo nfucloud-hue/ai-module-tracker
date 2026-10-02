@@ -185,6 +185,58 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .mytask .t{font-weight:700;font-size:15.5px;line-height:1.4}
 .due{font-size:12.5px}
 
+/* ---------- daily log ---------- */
+.daily{padding:14px}
+.logrow{border:1.5px solid var(--line);border-radius:14px;margin-bottom:10px;background:#fff;transition:border-color .12s,box-shadow .12s}
+.logrow .lh{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;border-radius:14px}
+.logrow .lh:hover{background:#fafbfd}
+.logrow .t{font-weight:500;line-height:1.4}
+.logrow .ck{width:24px;height:24px;border-radius:8px;border:2px solid #cfd3df;display:grid;place-items:center;flex:none;color:transparent;font-size:14px;font-weight:700}
+.logrow.on{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.logrow.on .ck{background:var(--brand);border-color:var(--brand);color:#fff}
+.logrow .lb{display:none;padding:0 14px 14px 50px}
+.logrow.on .lb{display:block}
+.pc-mini{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.issue-d{margin-top:12px}
+.issue-d summary,.more summary{cursor:pointer;color:var(--ink2);font-size:14px;padding:4px 0;list-style:none}
+.issue-d summary::before,.more summary::before{content:"＋ ";color:var(--brand)}
+.issue-d[open] summary::before,.more[open] summary::before{content:"－ "}
+.issue-d textarea{margin-top:8px}
+.more{margin-top:14px}
+.more .mini{display:flex;gap:10px;align-items:center;padding:9px 8px;border-bottom:1px solid var(--line2);font-size:14px;border-radius:8px}
+.delta{color:var(--ok);font-weight:700;font-size:13px}
+.delta.neg{color:var(--bad)}.delta.zero{color:var(--muted);font-weight:400}
+.day{margin-bottom:18px}
+.day-h{font-weight:700;color:var(--ink2);margin:0 0 8px;font-size:14px}
+.entry{padding:10px 8px;border-top:1px solid var(--line2);border-radius:8px}
+.day>.entry{background:#fff;border:1px solid var(--line);margin-bottom:8px;padding:12px 14px;border-radius:12px}
+.person-log .entry:first-of-type{border-top:0}
+.entry .txt{font-size:14px;margin-top:4px;white-space:pre-wrap}
+.entry .txt.bad{color:var(--bad)}
+/* ---------- checkpoint sections ---------- */
+.sumbox{display:flex;gap:10px}
+.sumbox>div{background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px 16px;display:flex;flex-direction:column;min-width:118px}
+.sumbox b{font-size:24px;line-height:1.25}.sumbox b small{font-size:14px;color:var(--muted)}
+.notice{background:#fff8e6;border:1px solid #f5dfa6;color:#7a5600;border-radius:12px;padding:9px 14px;font-size:14px;margin-bottom:14px;line-height:2}
+.notice.ok{background:var(--ok-soft);border-color:#bfe6cc;color:var(--ok)}
+.notice .av{width:22px;height:22px;font-size:9.5px}
+.sec{margin-bottom:14px}
+.sec-h{display:flex;gap:14px;align-items:flex-start;margin-bottom:8px}
+.sec-h h3{font-size:17px;display:flex;align-items:center;gap:8px}
+.cp-id{background:var(--brand);color:#fff;border-radius:8px;padding:0 8px;font-size:14px;line-height:24px}
+.sec-p{text-align:right;display:flex;flex-direction:column;flex:none}
+.sec-p b{font-size:22px;line-height:1.2}
+.kpi-chip{background:var(--brand-soft);color:var(--brand);border-radius:99px;padding:1px 11px;font-size:13px}
+.kpi-chip b{font-size:15px}
+.trow{display:grid;grid-template-columns:36px 1fr 150px;gap:12px;align-items:center;padding:10px 6px;border-top:1px solid var(--line2);border-radius:8px}
+.trow .tname{font-weight:500}
+.trow .tprog{display:flex;flex-direction:column;gap:6px}
+@media (max-width:760px){
+  .sumbox{width:100%}.sumbox>div{flex:1}
+  .trow{grid-template-columns:30px 1fr 92px;gap:8px}
+  .logrow .lb{padding:0 12px 12px}
+}
+
 /* ---------- modal ---------- */
 .mask{position:fixed;inset:0;background:rgba(20,24,40,.42);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;animation:fade .15s}
 .modal{background:#fff;border-radius:20px;width:100%;max-width:620px;max-height:calc(100vh - 40px);overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:pop .18s}
@@ -320,7 +372,7 @@ function taskChip(t) {
   return chip(t.status);
 }
 function barCls(t) { return t.status === "已完成" ? "ok" : (t.blocked || t.overdue) ? "bad" : t.behind ? "warn" : ""; }
-function canReport(t) { return S.role === "admin" || t.owner === S.me || t.helperList.includes(S.me); }
+function canReport(t) { return S.role === "admin" || t.owner === S.me; }
 function toast(msg, err) {
   const el = document.createElement("div"); el.className = "toast" + (err ? " err" : ""); el.textContent = msg;
   document.body.appendChild(el); setTimeout(() => el.remove(), err ? 4200 : 2400);
@@ -432,6 +484,8 @@ function derive() {
   D.reports.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   D.helps.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   D.reports.forEach(r => { r.progress = +r.progress || 0; if (!latest[r.taskId]) latest[r.taskId] = r; });
+  const prevP = {};
+  D.reports.slice().reverse().forEach(r => { r.delta = r.progress - (prevP[r.taskId] || 0); prevP[r.taskId] = r.progress; }); // 日誌累積：與前一筆的差
   D.tasks.forEach(t => {
     const l = latest[t.id];
     t.weight = +t.weight || 0; t.helperList = names(t.helpers); t.last = l || null;
@@ -468,10 +522,9 @@ function issues() { return S.D.tasks.filter(t => t.issue || t.blocked); }
 
 /* ================= 版面 ================= */
 function navItems() {
-  const n = issues().length + S.D.helps.filter(h => h.status === "待回應").length;
-  const mine = S.role === "member" ? S.D.helps.filter(h => h.helper === S.me && h.status === "待回應").length : 0;
-  const items = [["home", "總覽", "home"], ["work", "工作進度", "work"], ["collab", "難題協作", "collab", n], ["modules", "模組看板", "mod"], ["people", "人員", "people"]];
-  if (S.role === "member") items.unshift(["my", "我的工作", "my", mine]);
+  const mine = S.D.helps.filter(h => h.helper === S.me && h.status === "待回應").length;
+  const items = [["home", "查核點進度", "home"], ["team", "團隊日誌", "work"]];
+  if (S.D.tasks.some(t => t.owner === S.me)) items.unshift(["my", "我的日誌", "my", mine]);
   return items;
 }
 function shell() {
@@ -496,73 +549,170 @@ function render() {
   if (!S.D) return;
   const y = window.scrollY;
   shell();
-  const V = {my: vMy, home: vHome, work: vWork, collab: vCollab, modules: vModules, people: vPeople}[S.view] || vHome;
-  document.getElementById("main").innerHTML = (DEMO ? `<div class="demo"><b>示範模式</b>資料只存在這台電腦的瀏覽器，可以放心試按。正式上線後改存 Google 試算表、每人用專屬連結登入。<button data-act="demo-reset">還原範例資料</button></div>` : "") + V();
+  const V = {my: vMy, home: vHome, team: vTeam, modules: vModules}[S.view] || vHome;
+  document.getElementById("main").innerHTML = (DEMO ? `<div class="demo"><b>示範模式</b>資料只存在這台電腦的瀏覽器，可以放心試按。<button data-act="demo-reset">還原範例資料</button></div>` : "") + V();
   window.scrollTo(0, y);
 }
 function go(v) { S.view = v; try { sessionStorage.setItem("pm-view", v); } catch (e) {} render(); window.scrollTo(0, 0); }
 
-/* ---------- 總覽 ---------- */
-function ring(v, exp) {
-  const r = 50, c = 2 * Math.PI * r, col = v + 10 < exp ? "#e59a12" : "#4f46e5";
-  return `<div class="ring"><svg viewBox="0 0 120 120" width="100%" height="100%"><circle cx="60" cy="60" r="${r}" fill="none" stroke="#eceef5" stroke-width="12"/>
-  <circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}"/></svg>
-  <div class="c"><div><b>${pct(v)}</b><span>整體完成率</span></div></div></div>`;
+/* 依查核點分區：工作項目的「對應查核點」欄（1-1、1-2、1-3），空白歸「計畫管理」 */
+function sections() {
+  const D = S.D, keys = [];
+  D.tasks.forEach(t => { const k = t.checkpoint || ""; if (!keys.includes(k)) keys.push(k); });
+  keys.sort((a, b) => (a === "") - (b === "") || a.localeCompare(b, "zh-Hant", {numeric: true}));
+  return keys.map(k => {
+    const ts = D.tasks.filter(t => (t.checkpoint || "") === k);
+    const cps = k ? D.checkpoints.filter(c => c.id === k || c.id.startsWith(k)) : [];
+    const name = k ? String(ts[0].group || "").replace(/^\d+-\d+\s*/, "") : "計畫管理";
+    return Object.assign(stat(ts, name), {key: k, cps, due: cps.length ? cps[0].due : ts.reduce((m, t) => t.end > m ? t.end : m, "")});
+  });
 }
-function vHome() {
-  const D = S.D, wk = curWeek(), nextCp = D.checkpoints.filter(c => left(c.due) >= 0).sort((a, b) => a.due.localeCompare(b.due))[0];
-  const nextMeet = MEETINGS.find(d => d >= TODAY);
-  const att = attention();
-  const active = wk ? D.tasks.filter(t => t.start <= wk.e && t.end >= wk.s) : [];
-  const owners = [...new Set(active.map(t => t.owner))];
-  const reported = new Set(D.reports.filter(r => wk && ymd(new Date(r.createdAt)) >= wk.s).map(r => r.reporter));
-  const gap = D.all.actual - D.all.exp;
+function delta(r) { return r.delta > 0 ? `<span class="delta">+${r.delta}%</span>` : r.delta < 0 ? `<span class="delta neg">${r.delta}%</span>` : `<span class="delta zero">±0</span>`; }
+function loggedOn(name, day) { return S.D.reports.some(r => r.reporter === name && ymd(new Date(r.createdAt)) === day); }
+/* 某天「應該寫日誌」的人：當天有進行中主責工作的執行人員 */
+function dutyOn(day) {
+  const set = [];
+  S.D.tasks.forEach(t => { if (t.start <= day && t.end >= day && t.status !== "已完成" && !set.includes(t.owner) && S.D.staff.some(p => p.name === t.owner)) set.push(t.owner); });
+  return set;
+}
+
+/* ---------- 我的日誌（成員首頁） ---------- */
+function vMy() {
+  const D = S.D, me = S.me;
+  const mine = D.tasks.filter(t => t.owner === me);
+  const active = mine.filter(t => t.status !== "已完成" && t.start <= addDays(TODAY, 7)).sort((a, b) => a.end.localeCompare(b.end));
+  const later = mine.filter(t => t.status !== "已完成" && t.start > addDays(TODAY, 7));
+  const done = mine.filter(t => t.status === "已完成");
+  const toMe = D.helps.filter(h => h.helper === me && h.status !== "已解決");
+  const myLogs = D.reports.filter(r => r.reporter === me);
+  const today = myLogs.filter(r => ymd(new Date(r.createdAt)) === TODAY);
+  const byDay = {};
+  myLogs.slice(0, 40).forEach(r => { const d = ymd(new Date(r.createdAt)); (byDay[d] = byDay[d] || []).push(r); });
+  const secName = k => { const s = sections().find(x => x.key === (k || "")); return s ? (s.key ? "查核點 " + s.key : s.name) : ""; };
   return `
   <section class="hero">
-    <div>
-      <div class="eyebrow">${esc(PROJECT.no)} · 本表區間 ${md(PROJECT.start)}–${md(PROJECT.end)}</div>
-      <h1>${S.role === "admin" ? "主管總覽" : "專案總覽"}</h1>
-      <div class="muted">今天 ${md(TODAY)}（${wd(TODAY)}）${wk ? ` · 第 <b>W${wk.n}</b> 週（${md(wk.s)}–${md(wk.e)}）` : ""}${nextMeet ? ` · 下次管控會議 <b>${md(nextMeet)}（${wd(nextMeet)}）</b>${left(nextMeet) === 0 ? "（今天）" : ""}` : ""}</div>
-    </div>
-    ${ring(D.all.actual, D.all.exp)}
+    <div><div class="eyebrow">工作日誌 · ${md(TODAY)}（${wd(TODAY)}）</div><h1>${esc(me)}，今天做了什麼？</h1>
+      <div class="muted">${today.length ? `<span style="color:var(--ok);font-weight:500">✓ 今天已記錄 ${today.length} 項</span>，有新進度可以再補充` : "勾選今天有進行的工作，寫下內容並拉到目前完成度就好"}</div></div>
   </section>
-  <div class="grid g4">
-    <div class="card kpi"><span class="l">整體加權完成率</span><span class="v">${pct(D.all.actual)}</span>
-      <span class="d ${gap < -10 ? "" : "muted"}" style="${gap < -10 ? "color:var(--warn)" : ""}">依時程應達 ${pct(D.all.exp)}${gap < -10 ? "，落後 " + pct(-gap) : ""}</span></div>
-    <div class="card kpi"><span class="l">下一個查核點</span><span class="v">${nextCp ? esc(nextCp.id) : "—"}<small>${nextCp ? " 剩 " + left(nextCp.due) + " 天" : ""}</small></span>
-      <span class="d muted">${nextCp ? md(nextCp.due) + " · 達成 " + nextCp.current + "／" + nextCp.target : ""}</span></div>
-    <div class="card kpi clickable" data-act="nav" data-v="collab"><span class="l">待解決難題</span><span class="v" style="color:${issues().length ? "var(--bad)" : "inherit"}">${issues().length}<small> 項</small></span>
-      <span class="d muted">協助請求 ${openHelps().length} 件進行中</span></div>
-    <div class="card kpi"><span class="l">本週已回報</span><span class="v">${owners.filter(n => reported.has(n)).length}<small>／${owners.length} 人</small></span>
-      <span class="d muted">${D.all.done}／${D.tasks.length} 項工作已完成</span></div>
-  </div>
-
-  <h2>查核點達成狀況</h2>
-  <div class="grid g4">${D.checkpoints.map(cpCard).join("")}</div>
-
-  <div class="card" style="margin-top:14px">${trend()}</div>
-
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>需要關注 <span class="muted">${att.length ? att.length + " 項" : ""}</span></h3>
-      ${att.length ? att.slice(0, 8).join("") + (att.length > 8 ? `<div style="text-align:center;margin-top:8px"><button class="link" data-act="nav" data-v="collab">查看全部 →</button></div>` : "") : `<div class="empty">目前沒有卡關或落後的工作 👍</div>`}
+  ${toMe.length ? `<div class="grid g2" style="margin-bottom:18px">${toMe.map(helpCard).join("")}</div>` : ""}
+  <form data-form="daily" class="card daily">
+    ${active.length ? active.map(t => logRow(t, secName(t.checkpoint), today.filter(r => r.taskId === t.id))).join("") : `<div class="empty">目前沒有進行中的主責工作</div>`}
+    ${active.length ? `<div class="row between wrap" style="margin-top:6px"><span class="muted small" id="dailyHint">尚未勾選工作</span><button class="btn" id="dailyBtn" disabled>送出今日日誌</button></div>` : ""}
+  </form>
+  ${later.length ? `<details class="more"><summary>之後的主責工作（${later.length}）</summary>${later.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span><span class="muted small nowrap">${md(t.start)} 開始</span></div>`).join("")}</details>` : ""}
+  ${done.length ? `<details class="more"><summary>已完成（${done.length}）</summary>${done.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span>${chip("已完成")}</div>`).join("")}</details>` : ""}
+  <h2>我的日誌紀錄</h2>
+  ${Object.keys(byDay).length ? Object.keys(byDay).map(d => `<div class="day"><div class="day-h">${d === TODAY ? "今天" : d === addDays(TODAY, -1) ? "昨天" : md(d)}（${wd(d)}）</div>
+    ${byDay[d].map(r => entry(r, false)).join("")}</div>`).join("") : `<div class="card empty">還沒有日誌，從上面勾選第一項工作開始吧</div>`}`;
+}
+function logRow(t, sec, todays) {
+  const d = left(t.end), when = TODAY < t.start ? `${md(t.start)} 開始` : d < 0 ? `<b style="color:var(--bad)">逾期 ${-d} 天</b>` : d === 0 ? "<b>今天到期</b>" : `剩 ${d} 天`;
+  return `<div class="logrow" data-task="${t.id}">
+    <div class="lh" data-act="logtoggle" data-id="${t.id}">
+      <span class="ck">✓</span>
+      <div style="flex:1;min-width:0"><div class="t"><span class="code">${esc(t.code)}</span> ${esc(t.name)}</div>
+        <div class="small muted">${esc(sec)} · ${when}${todays.length ? ` · <span style="color:var(--ok)">今天已記錄 ${todays.map(r => r.delta > 0 ? "+" + r.delta + "%" : "").filter(Boolean).join(" ") || "✓"}</span>` : ""}</div></div>
+      <div class="pc-mini"><b>${t.progress}%</b><div class="pbar ${barCls(t)}" style="width:64px"><i style="width:${t.progress}%"></i></div></div>
     </div>
-    <div class="card"><h3>分項進度 <span class="muted">｜黑線＝依時程應達進度</span></h3>
-      ${D.groups.map(g => `<div class="grp"><div class="row between"><span>${esc(g.name)}</span><span><b>${pct(g.actual)}</b> <span class="muted small">／應達 ${pct(g.exp)}</span></span></div>
-        <div class="pbar ${g.actual + 10 < g.exp ? "warn" : g.actual >= 100 ? "ok" : ""}"><i style="width:${g.actual}%"></i><b style="left:${g.exp}%"></b></div></div>`).join("")}
-    </div>
-  </div>
-
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>本週工作 <span class="muted">${wk ? `W${wk.n}｜${md(wk.s)}–${md(wk.e)}` : "本週不在計畫區間內"}</span></h3>
-      ${active.length ? active.map(t => `<div class="wk clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span>
-        <span class="ellip" style="flex:1">${esc(t.name)}</span>${av(t.owner)}<span class="small nowrap" style="width:40px;text-align:right"><b>${t.progress}%</b></span>${taskChip(t)}</div>`).join("") : `<div class="empty">本週沒有排定的工作</div>`}
-    </div>
-    <div class="card"><h3>本週回報狀況 <span class="muted">｜依本週有主責工作的人員</span></h3>
-      ${owners.length ? `<div class="rep">${owners.map(n => `<span class="p ${reported.has(n) ? "ok" : "no"}">${av(n)}${esc(n)} ${reported.has(n) ? "✓ 已回報" : "<span class='muted'>尚未回報</span>"}</span>`).join("")}</div>` : `<div class="empty">本週沒有需要回報的人員</div>`}
-      <div class="muted small" style="margin-top:14px">每次回報會記錄完成度、完成事項、下一步與遇到的難題；主管可直接在工作項目內回覆指示。</div>
+    <div class="lb">
+      <textarea class="inp ta" name="done_${t.id}" placeholder="今天的工作內容（例：完成 M1–M3 SAST 掃描，產出報告 3 份）"></textarea>
+      <div class="slider" style="margin-top:12px"><span class="small muted nowrap">完成度</span><input type="range" name="progress_${t.id}" min="0" max="100" step="5" value="${t.progress}" data-prev="${t.progress}" data-act-input="log-pg"><output id="pg_${t.id}">${t.progress}%</output></div>
+      <div class="quick">${[5, 10, 20].map(v => `<button type="button" data-act="pgadd" data-id="${t.id}" data-v="${v}">+${v}%</button>`).join("")}<button type="button" data-act="pgadd" data-id="${t.id}" data-v="100">完成 ✓</button></div>
+      <details class="issue-d"><summary>遇到問題或需要協助？</summary>
+        <textarea class="inp ta" name="issue_${t.id}" placeholder="卡在哪裡、影響什麼"></textarea>
+        <div class="small muted" style="margin:10px 0 6px">需要誰協助？（選填，對方會收到通知）</div>
+        <div class="pick" data-pick="helpers_${t.id}" data-multi="1">${S.D.staff.map(p => p.name).filter(n => n !== S.me).map(n => `<button type="button" data-v="${esc(n)}">${av(n)}${esc(n)}</button>`).join("")}</div>
+      </details>
     </div>
   </div>`;
 }
+/* 一筆日誌（showWho：團隊日誌顯示人名） */
+function entry(r, showWho) {
+  const t = S.D.taskById[r.taskId] || {code: "", name: "（已刪除的工作）"};
+  return `<div class="entry clickable" data-act="task" data-id="${esc(r.taskId)}">
+    <div class="row wrap" style="gap:8px">${showWho ? "" : ""}<span class="code">${esc(t.code)}</span><span style="flex:1;min-width:0" class="ellip">${esc(t.name)}</span>${delta(r)}<b class="small">${r.progress}%</b></div>
+    ${r.done ? `<div class="txt">${esc(r.done)}</div>` : ""}
+    ${r.next ? `<div class="txt muted">下一步：${esc(r.next)}</div>` : ""}
+    ${r.issue ? `<div class="txt bad">⚠ ${esc(r.issue)}</div>` : ""}
+    ${r.reply ? `<div class="reply"><b>主管回覆：</b>${esc(r.reply)}</div>` : ""}
+    <div class="small muted" style="margin-top:4px">${new Date(r.createdAt).toTimeString().slice(0, 5)}${S.role === "admin" && !r.reply ? ' · <span style="color:var(--brand)">點此回覆</span>' : ""}</div>
+  </div>`;
+}
+
+/* ---------- 查核點進度（主管首頁） ---------- */
+function vHome() {
+  const D = S.D, wk = curWeek(), nextMeet = MEETINGS.find(d => d >= TODAY);
+  const duty = dutyOn(TODAY), logged = duty.filter(n => loggedOn(n, TODAY));
+  const blocked = D.tasks.filter(t => t.blocked), overdue = D.tasks.filter(t => t.overdue && !t.blocked);
+  const waiting = D.helps.filter(h => h.status === "待回應");
+  const att = blocked.map(t => `<div class="att clickable" data-act="task" data-id="${t.id}"><span class="ic" style="background:var(--bad)"></span><div class="m"><div class="t1">${esc(t.code)} ${esc(t.name)} <span class="muted small">· ${esc(t.owner)}</span></div><div class="t2" style="color:var(--bad)">${esc(t.issue || "遇到困難")}</div></div></div>`)
+    .concat(overdue.map(t => `<div class="att clickable" data-act="task" data-id="${t.id}"><span class="ic" style="background:var(--bad)"></span><div class="m"><div class="t1">${esc(t.code)} ${esc(t.name)} <span class="muted small">· ${esc(t.owner)}</span></div><div class="t2">已逾期 ${-left(t.end)} 天，目前 ${t.progress}%</div></div></div>`))
+    .concat(waiting.map(h => `<div class="att"><span class="ic" style="background:#e59a12"></span><div class="m"><div class="t1">${esc(h.requester)} 請 ${esc(h.helper)} 協助</div><div class="t2">${esc(h.content)} · ${ago(h.createdAt)}</div></div></div>`));
+  const gap = D.all.actual - D.all.exp;
+  return `
+  <div class="row between wrap" style="margin-bottom:16px;gap:14px">
+    <div><div class="eyebrow">${esc(PROJECT.no)} · ${md(TODAY)}（${wd(TODAY)}）${wk ? " · W" + wk.n : ""}</div><h1>查核點進度</h1>
+      ${nextMeet ? `<div class="muted small">下次管控會議 ${md(nextMeet)}（${wd(nextMeet)}）${left(nextMeet) === 0 ? "・今天" : "・" + left(nextMeet) + " 天後"}</div>` : ""}</div>
+    <div class="sumbox">
+      <div><span class="muted small">整體完成率</span><b>${pct(D.all.actual)}</b><span class="small" style="color:${gap < -10 ? "var(--warn)" : "var(--muted)"}">應達 ${pct(D.all.exp)}</span></div>
+      <div class="clickable" data-act="nav" data-v="team"><span class="muted small">今日日誌</span><b>${logged.length}<small>／${duty.length}</small></b><span class="small muted">人已填寫</span></div>
+    </div>
+  </div>
+  ${duty.length > logged.length ? `<div class="notice">今天還沒寫日誌：${duty.filter(n => !logged.includes(n)).map(n => `<span class="row" style="gap:4px;display:inline-flex">${av(n)}${esc(n)}</span>`).join("　")}</div>` : ""}
+  ${att.length ? `<div class="card" style="margin-bottom:14px"><h3>需要處理 <span class="muted">${att.length} 項</span></h3>${att.join("")}</div>` : ""}
+  ${sections().map(secCard).join("")}
+  <details class="more"><summary>進度趨勢圖</summary><div class="card" style="margin-top:10px">${trend()}</div></details>`;
+}
+function secCard(s) {
+  const d = s.due ? left(s.due) : null;
+  const dueChip = !s.key ? "" : s.actual >= 100 ? chip("已完成", "s-ok") : d < 0 ? chip("已過期限", "s-bad") : chip(`${md(s.due)} 截止 · 剩 ${d} 天`, d <= 7 ? "s-warn" : "s-idle");
+  const kpis = s.cps.map(c => {
+    const link = c.auto ? `data-act="nav" data-v="modules"` : `data-act="cp" data-id="${esc(c.id)}"`;
+    const label = c.auto === "sec" ? "模組完成檢測" : c.auto === "cloud" ? "模組完成上架" : /累計/.test(c.title) ? "家累計擴散" : /工具機廠/.test(c.title) ? "家工具機廠擴散" : c.title.replace(/（.*?）/g, "");
+    return `<span class="kpi-chip clickable" ${link} title="${esc(c.title)}"><b>${c.current}</b>／${c.target} ${esc(label)}${c.auto ? "" : " ✎"}</span>`;
+  }).join("");
+  return `<div class="card sec">
+    <div class="sec-h">
+      <div style="flex:1;min-width:0"><div class="row wrap" style="gap:8px"><h3 style="margin:0">${s.key ? `<span class="cp-id">${esc(s.key)}</span>` : ""}${esc(s.name)}</h3>${dueChip}</div>
+        ${kpis ? `<div class="row wrap" style="gap:6px;margin-top:8px">${kpis}</div>` : ""}</div>
+      <div class="sec-p"><b>${pct(s.actual)}</b><span class="muted small">應達 ${pct(s.exp)}</span></div>
+    </div>
+    <div class="pbar ${s.actual + 10 < s.exp ? "warn" : s.actual >= 100 ? "ok" : ""}" style="margin:2px 0 8px"><i style="width:${s.actual}%"></i><b style="left:${s.exp}%"></b></div>
+    ${s.tasks.map(t => `<div class="trow clickable" data-act="task" data-id="${t.id}">
+      <span class="code">${esc(t.code)}</span>
+      <div style="min-width:0"><div class="ellip tname">${esc(t.name)}</div>
+        <div class="small muted row" style="gap:6px">${av(t.owner)}${esc(t.owner)} · ${md(t.start)}–${md(t.end)}${t.last ? " · " + ago(t.last.createdAt) : ""}</div>
+        ${t.blocked && t.issue ? `<div class="small" style="color:var(--bad)">⚠ ${esc(t.issue)}</div>` : ""}</div>
+      <div class="tprog"><div class="row" style="gap:8px;justify-content:flex-end"><b>${t.progress}%</b>${t.status === "已完成" || t.attention ? taskChip(t) : ""}</div>
+        <div class="pbar ${barCls(t)}"><i style="width:${t.progress}%"></i><b style="left:${t.exp}%"></b></div></div>
+    </div>`).join("")}
+  </div>`;
+}
+
+/* ---------- 團隊日誌 ---------- */
+function vTeam() {
+  const D = S.D, range = S.teamRange || "today";
+  const from = range === "today" ? TODAY : range === "yday" ? addDays(TODAY, -1) : addDays(TODAY, -6);
+  const to = range === "yday" ? addDays(TODAY, -1) : TODAY;
+  const logs = D.reports.filter(r => { const d = ymd(new Date(r.createdAt)); return d >= from && d <= to; });
+  const days = [];
+  logs.forEach(r => { const d = ymd(new Date(r.createdAt)); if (!days.includes(d)) days.push(d); });
+  const missDay = range === "week" ? null : from, duty = missDay ? dutyOn(missDay) : [], miss = duty.filter(n => !loggedOn(n, missDay));
+  return `
+  <div class="row between wrap" style="margin-bottom:14px;gap:10px"><div><h1>團隊日誌</h1><div class="muted small">每個人每天的工作紀錄${S.role === "admin" ? "，點任一筆即可回覆指示" : ""}</div></div>
+    <div class="seg">${[["today", "今天"], ["yday", "昨天"], ["week", "近 7 天"]].map(x => `<button data-act="trange" data-v="${x[0]}" class="${range === x[0] ? "on" : ""}">${x[1]}</button>`).join("")}</div></div>
+  ${missDay && duty.length ? `<div class="notice ${miss.length ? "" : "ok"}">${miss.length ? `${range === "today" ? "今天" : "昨天"}還沒寫日誌：${miss.map(n => `<span class="row" style="gap:4px;display:inline-flex">${av(n)}${esc(n)}</span>`).join("　")}` : `✓ ${range === "today" ? "今天" : "昨天"}該填寫的 ${duty.length} 人都已完成日誌`}</div>` : ""}
+  ${days.length ? days.map(d => {
+    const ppl = [];
+    logs.filter(r => ymd(new Date(r.createdAt)) === d).forEach(r => { if (!ppl.includes(r.reporter)) ppl.push(r.reporter); });
+    return `<div class="day"><div class="day-h">${d === TODAY ? "今天" : d === addDays(TODAY, -1) ? "昨天" : md(d)}（${wd(d)}）</div>
+      <div class="grid g2">${ppl.map(n => {
+        const rs = logs.filter(r => r.reporter === n && ymd(new Date(r.createdAt)) === d);
+        return `<div class="card person-log"><div class="row" style="gap:8px;margin-bottom:4px">${av(n)}<b>${esc(n)}</b><span class="muted small">${rs.length} 項</span></div>${rs.map(r => entry(r, true)).join("")}</div>`;
+      }).join("")}</div></div>`;
+  }).join("") : `<div class="card empty">${range === "today" ? "今天還沒有人寫日誌" : "這段期間沒有日誌"}</div>`}`;
+}
+
 /* 進度趨勢：每週末的「實際完成率」（依當時最新回報）對照「依時程應達」 */
 function trend() {
   const D = S.D, g = S.trendG || "整體";
@@ -595,136 +745,6 @@ function trend() {
         <text x="${last.x}" y="${last.y - 10}" text-anchor="${last.x > W0 - 60 ? "end" : "middle"}" font-size="12" font-weight="700" fill="${gap < -5 ? "#c27100" : "#4f46e5"}">${pct(last.v)}</text>` : ""}
     </svg>`;
 }
-function cpCard(c) {
-  const p = c.target ? Math.min(100, c.current / c.target * 100) : 0, d = left(c.due);
-  const st = c.current >= c.target ? chip("已達成", "s-ok") : d < 0 ? chip("已逾期", "s-bad") : d <= 7 ? chip("剩 " + d + " 天", "s-warn") : chip("剩 " + d + " 天", "s-idle");
-  const src = c.auto === "sec" ? "依模組看板「複測通過」自動計算" : c.auto === "cloud" ? "依模組看板「已上架」自動計算" : (c.updatedAt ? `${esc(c.updatedBy)} 更新於 ${ago(c.updatedAt)}` : "手動填寫");
-  return `<div class="card cp ${c.auto ? "" : "clickable"}" ${c.auto ? `data-act="nav" data-v="modules"` : `data-act="cp" data-id="${esc(c.id)}"`}>
-    <div class="top"><span class="id">${esc(c.id)}</span>${st}</div>
-    <div class="t">${esc(c.title)}</div>
-    <div class="row between" style="margin-bottom:6px"><span class="num">${c.current}<small> ／ ${c.target}</small></span><span class="muted small">期限 ${md(c.due)}</span></div>
-    <div class="pbar ${p >= 100 ? "ok" : ""}"><i style="width:${p}%"></i></div>
-    <div class="muted small" style="margin-top:8px">${src}${c.auto ? "" : " · 點擊更新"}</div>
-  </div>`;
-}
-function attention() {
-  const D = S.D, out = [];
-  const item = (dot, t1, t2, extra, act) => `<div class="att clickable" ${act}><span class="ic" style="background:${dot}"></span><div class="m"><div class="t1">${t1}</div><div class="t2">${t2}</div></div>${extra}</div>`;
-  D.tasks.filter(t => t.blocked).forEach(t => out.push(item("var(--bad)", `${esc(t.code)} ${esc(t.name)}`, `<b style="color:var(--bad)">遇到困難</b>：${esc(t.issue || "（未填寫說明）")}`, av(t.last && t.last.reporter || t.owner), `data-act="task" data-id="${t.id}"`)));
-  D.tasks.filter(t => t.overdue && !t.blocked).forEach(t => out.push(item("var(--bad)", `${esc(t.code)} ${esc(t.name)}`, `已逾期 ${-left(t.end)} 天，目前 ${t.progress}%`, av(t.owner), `data-act="task" data-id="${t.id}"`)));
-  D.helps.filter(h => h.status === "待回應").forEach(h => {
-    const t = D.taskById[h.taskId], days = Math.floor((Date.now() - new Date(h.createdAt)) / 864e5);
-    out.push(item("#e59a12", `${esc(h.requester)} → ${esc(h.helper)} 請求協助${t ? "（" + esc(t.code) + "）" : ""}`, `${esc(h.content)}${days >= 1 ? ` · <b style="color:var(--warn)">${days} 天未回應</b>` : ""}`, `<span class="avs">${av(h.requester)}${av(h.helper)}</span>`, `data-act="nav" data-v="collab"`));
-  });
-  D.tasks.filter(t => t.behind && !t.blocked).forEach(t => out.push(item("#e59a12", `${esc(t.code)} ${esc(t.name)}`, `進度 ${t.progress}%，依時程應達 ${t.exp}%`, av(t.owner), `data-act="task" data-id="${t.id}"`)));
-  D.tasks.filter(t => t.issue && !t.blocked && t.status !== "已完成").forEach(t => out.push(item("#8a91a3", `${esc(t.code)} ${esc(t.name)}`, `回報問題：${esc(t.issue)}`, av(t.owner), `data-act="task" data-id="${t.id}"`)));
-  return out;
-}
-
-/* ---------- 我的工作（成員） ---------- */
-function vMy() {
-  const D = S.D, me = S.me;
-  const own = D.tasks.filter(t => t.owner === me), help = D.tasks.filter(t => t.owner !== me && t.helperList.includes(me));
-  const sortT = arr => arr.slice().sort((a, b) => (a.status === "已完成") - (b.status === "已完成") || a.end.localeCompare(b.end));
-  const toMe = D.helps.filter(h => h.helper === me && h.status !== "已解決"), fromMe = D.helps.filter(h => h.requester === me && h.status !== "已解決");
-  const nowT = own.filter(t => t.status !== "已完成" && t.start <= addDays(TODAY, 7));
-  return `
-  <section class="hero">
-    <div><div class="eyebrow">我的工作</div><h1>嗨，${esc(me)}</h1>
-      <div class="muted">${nowT.length ? `你有 <b>${nowT.length}</b> 項主責工作正在進行或即將開始` : "目前沒有進行中的主責工作"}${toMe.filter(h => h.status === "待回應").length ? `，另有 <b style="color:var(--warn)">${toMe.filter(h => h.status === "待回應").length}</b> 件同事請你協助` : ""}。</div></div>
-    <div class="row wrap"><button class="btn ghost" data-act="help-new">🤝 請同事協助</button><button class="btn" data-act="report">＋ 回報進度</button></div>
-  </section>
-  ${toMe.length ? `<h2>同事請我協助</h2><div class="grid g2">${toMe.map(helpCard).join("")}</div>` : ""}
-  <h2>我主責的工作 <span class="muted small">（${own.length} 項）</span></h2>
-  <div class="grid g2">${sortT(own).map(myCard).join("") || `<div class="card empty">沒有主責工作</div>`}</div>
-  <h2>我協辦的工作 <span class="muted small">（${help.length} 項）</span></h2>
-  <div class="card" style="padding:6px 10px">${sortT(help).map(t => `<div class="wk clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span><span class="small muted nowrap">主責</span>${av(t.owner)}<b class="small" style="width:38px;text-align:right">${t.progress}%</b>${taskChip(t)}</div>`).join("") || `<div class="empty">沒有協辦工作</div>`}</div>
-  ${fromMe.length ? `<h2>我提出的協助請求</h2><div class="grid g2">${fromMe.map(helpCard).join("")}</div>` : ""}`;
-}
-function myCard(t) {
-  const d = left(t.end), when = TODAY < t.start ? `${md(t.start)} 開始` : t.status === "已完成" ? "已完成" : d < 0 ? `已逾期 ${-d} 天` : d === 0 ? "今天到期" : `剩 ${d} 天（${md(t.end)}）`;
-  return `<div class="card mytask">
-    <div class="top"><div class="clickable" data-act="task" data-id="${t.id}" style="flex:1;border-radius:8px"><span class="code">${esc(t.code)}</span> <span class="t">${esc(t.name)}</span>
-      <div class="muted small">${esc(t.deliverable)}</div></div>${taskChip(t)}</div>
-    <div class="row"><div class="pbar ${barCls(t)}" style="flex:1"><i style="width:${t.progress}%"></i><b style="left:${t.exp}%"></b></div><b>${t.progress}%</b></div>
-    <div class="row between"><span class="due ${d < 0 && t.status !== "已完成" ? "" : "muted"}" style="${d < 0 && t.status !== "已完成" ? "color:var(--bad)" : ""}">${when}${t.last ? " · 上次回報 " + ago(t.last.createdAt) : " · 尚未回報"}</span>
-      <span class="row">${t.helperList.length ? `<span class="small muted">協辦</span><span class="avs">${t.helperList.slice(0, 4).map(n => av(n)).join("")}</span>` : ""}
-      ${t.status !== "已完成" ? `<button class="btn sm" data-act="report" data-id="${t.id}">回報</button>` : ""}</span></div>
-    ${t.last && t.last.reply ? `<div class="reply"><b>主管回覆：</b>${esc(t.last.reply)}</div>` : ""}
-  </div>`;
-}
-
-/* ---------- 工作進度（甘特） ---------- */
-function vWork() {
-  const D = S.D, f = S.f, total = dn(PROJECT.end) - dn(PROJECT.start) + 1;
-  const pos = s => Math.max(0, Math.min(100, (dn(s) - dn(PROJECT.start)) / total * 100));
-  const todayX = TODAY >= PROJECT.start && TODAY <= PROJECT.end ? (dn(TODAY) - dn(PROJECT.start) + .5) / total * 100 : -1;
-  const match = t => (f.st === "all" || (f.st === "att" && t.attention) || (f.st === "run" && t.status !== "已完成" && t.start <= TODAY) || (f.st === "done" && t.status === "已完成")) &&
-    (!f.q || (t.code + t.name + t.deliverable).toLowerCase().includes(f.q.toLowerCase()));
-  const weekLines = WEEKS.slice(1).map(w => `<span class="wkl" style="left:${pos(w.s)}%"></span>`).join("");
-  const row = (t, helping) => `<div class="gr clickable${helping ? " helping" : ""}" data-act="task" data-id="${t.id}">
-      <div class="nm"><span class="code">${esc(t.code)}</span><div class="m"><div class="t">${esc(t.name)}</div>
-        <div class="s row" style="gap:6px">${f.who && !helping ? "" : `${av(t.owner)}<span>${helping ? "主責 " : ""}${esc(t.owner)}</span>`}${!helping && t.helperList.length ? `<span>${f.who ? "" : "· "}協辦 ${t.helperList.length > 3 ? t.helperList.length + " 人" : esc(t.helperList.join("、"))}</span>` : ""}</div></div></div>
-      <div class="trk"><div class="track">${weekLines}<div class="tb ${barCls(t)}" style="left:${pos(t.start)}%;width:${Math.max(1.4, pos(addDays(t.end, 1)) - pos(t.start))}%" title="${md(t.start)}–${md(t.end)}"><i style="width:${t.progress}%"></i></div>${todayX >= 0 ? `<span class="today" style="left:${todayX}%"></span>` : ""}</div></div>
-      <div class="pg"><span class="row" style="gap:8px"><span class="pc">${t.progress}%</span>${taskChip(t)}</span><span class="small muted">${md(t.start)}–${md(t.end)}</span></div>
-    </div>`;
-  let rows = "";
-  if (f.who) {
-    // 選了人員：主責與協辦分開列，主責在上
-    const own = D.tasks.filter(t => t.owner === f.who && match(t)), help = D.tasks.filter(t => t.owner !== f.who && t.helperList.includes(f.who) && match(t));
-    const ownAll = D.tasks.filter(t => t.owner === f.who), avg = ownAll.length ? stat(ownAll).actual : 0;
-    rows += `<div class="ggroup role-h"><span class="row" style="flex:1;gap:8px">${av(f.who)}<span>${esc(f.who)} 的主責工作</span><span class="chip nodot s-brand">${own.length} 項</span></span><span class="small muted nowrap">主責完成率</span><b class="small">${pct(avg)}</b></div>`;
-    rows += own.map(t => row(t)).join("") || `<div class="empty">沒有符合條件的主責工作</div>`;
-    rows += `<div class="ggroup role-h helping-h"><span class="row" style="flex:1;gap:8px"><span>協辦工作</span><span class="chip nodot s-idle">${help.length} 項</span></span><span class="small muted">支援其他同仁的工作</span></div>`;
-    rows += help.map(t => row(t, true)).join("") || `<div class="empty">沒有符合條件的協辦工作</div>`;
-  } else D.groups.forEach(g => {
-    const ts = g.tasks.filter(match);
-    if (!ts.length) return;
-    rows += `<div class="ggroup"><span style="flex:1">${esc(g.name)}</span><span class="small muted nowrap">${g.done}/${g.tasks.length} 完成</span><div class="pbar ${g.actual + 10 < g.exp ? "warn" : ""}"><i style="width:${g.actual}%"></i><b style="left:${g.exp}%"></b></div><b class="small" style="width:36px">${pct(g.actual)}</b></div>`;
-    rows += ts.map(t => row(t)).join("");
-  });
-  return `
-  <div class="row between wrap" style="margin-bottom:14px"><div><h1>工作進度</h1><div class="muted small">點任一工作可查看回報紀錄、回覆或回報進度；紅線＝今天</div></div>
-    <div class="row">${S.role === "admin" && !S.limited ? `<button class="btn ghost" data-act="task-edit">＋ 新增工作</button>` : ""}<button class="btn" data-act="report">＋ 回報進度</button></div></div>
-  <div class="filters">
-    <div class="seg">${[["all", "全部"], ["att", "需注意"], ["run", "進行中"], ["done", "已完成"]].map(s => `<button data-act="fst" data-v="${s[0]}" class="${f.st === s[0] ? "on" : ""}">${s[1]}</button>`).join("")}</div>
-    <select data-fil="who"><option value="">所有人員</option>${D.staff.map(p => `<option ${f.who === p.name ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
-    <input data-fil="q" placeholder="搜尋編號或名稱" value="${esc(f.q)}" style="min-width:160px">
-  </div>
-  <div class="card gantt">
-    <div class="gh"><div>工作項目</div><div class="weeks"><div class="wkh">${WEEKS.map(w => `<span style="left:${pos(w.s)}%;${curWeek() === w ? "color:var(--brand);font-weight:700" : ""}">W${w.n}<br>${md(w.s)}</span>`).join("")}</div></div><div>進度</div></div>
-    ${rows || `<div class="empty">沒有符合條件的工作</div>`}
-  </div>`;
-}
-
-/* ---------- 難題與協作 ---------- */
-function vCollab() {
-  const D = S.D, iss = issues(), tab = S.helpTab;
-  const helps = D.helps.filter(h => tab === "all" || (tab === "open" ? h.status !== "已解決" : h.status === "已解決"));
-  return `
-  <div class="row between wrap" style="margin-bottom:6px"><div><h1>難題與協作</h1><div class="muted small">工作卡關時，回報「遇到困難」並勾選需要誰協助，系統會自動通知對方；其他同事也可以主動「我來協助」。</div></div>
-    <button class="btn" data-act="help-new">🤝 發出協助請求</button></div>
-  <h2>目前的難題 <span class="muted small">（${iss.length}）</span></h2>
-  <div class="grid g2">${iss.map(issueCard).join("") || `<div class="card empty">目前沒有回報中的難題 👍</div>`}</div>
-  <div class="row between wrap"><h2>協助請求</h2><div class="seg">${[["open", "進行中"], ["done", "已解決"], ["all", "全部"]].map(s => `<button data-act="htab" data-v="${s[0]}" class="${tab === s[0] ? "on" : ""}">${s[1]}</button>`).join("")}</div></div>
-  <div class="grid g2">${helps.map(helpCard).join("") || `<div class="card empty">沒有${tab === "done" ? "已解決的" : "進行中的"}協助請求</div>`}</div>
-  <h2>協作關係 <span class="muted small">｜誰在支援誰（依工作協辦分工＋協助請求次數）</span></h2>
-  <div class="card" style="overflow-x:auto">${matrix()}</div>`;
-}
-function issueCard(t) {
-  const l = t.last || {}, rel = S.D.helps.filter(h => h.taskId === t.id && h.status !== "已解決");
-  const canOffer = S.role === "member" && t.owner !== S.me && !rel.some(h => h.helper === S.me);
-  return `<div class="card issue ${t.blocked ? "" : "warn"}">
-    <div class="row between"><span class="clickable" data-act="task" data-id="${t.id}" style="border-radius:6px"><span class="code">${esc(t.code)}</span> <b>${esc(t.name)}</b></span>${taskChip(t)}</div>
-    <div class="q">${esc(t.issue || "（未填寫說明）")}</div>
-    <div class="row between wrap small"><span class="row" style="gap:6px">${av(l.reporter || t.owner)}<span>${esc(l.reporter || t.owner)} · ${ago(l.createdAt)} · 進度 ${t.progress}%</span></span>
-      <span class="row">${rel.length ? `<span class="muted">協助中：</span><span class="avs">${rel.map(h => av(h.helper)).join("")}</span>` : `<span class="muted">尚無人協助</span>`}</span></div>
-    ${l.reply ? `<div class="reply"><b>主管回覆：</b>${esc(l.reply)}</div>` : ""}
-    <div class="row" style="margin-top:12px;justify-content:flex-end">
-      ${S.role === "admin" ? `<button class="btn sm soft" data-act="task" data-id="${t.id}">回覆指示</button>` : ""}
-      ${canOffer ? `<button class="btn sm" data-act="help-offer" data-id="${t.id}">🙋 我來協助</button>` : ""}
-    </div></div>`;
-}
 function helpCard(h) {
   const t = S.D.taskById[h.taskId], mine = S.me && (h.helper === S.me || h.requester === S.me);
   const can = S.role === "admin" || mine;
@@ -738,27 +758,13 @@ function helpCard(h) {
       ${can && h.status !== "已解決" ? `<button class="btn sm ghost" data-act="help-update" data-id="${h.id}">回覆／結案</button>` : ""}</span></div>
   </div>`;
 }
-function matrix() {
-  const D = S.D, P = D.staff.map(p => p.name), m = {};
-  const add = (helper, owner, n) => { if (helper === owner || !P.includes(helper) || !P.includes(owner)) return; m[helper + ">" + owner] = (m[helper + ">" + owner] || 0) + n; };
-  D.tasks.forEach(t => t.helperList.forEach(h => add(h, t.owner, 1)));
-  D.helps.forEach(h => add(h.helper, h.requester, 1));
-  const max = Math.max(1, ...Object.values(m));
-  return `<table class="matrix"><tr><th class="muted small" style="text-align:left">支援者 ↓　被支援 →</th>${P.map(n => `<th>${av(n)}<div>${esc(n.slice(-2))}</div></th>`).join("")}</tr>
-    ${P.map(a => `<tr><th style="text-align:right"><span class="row" style="justify-content:flex-end;gap:6px">${esc(a)}${av(a)}</span></th>${P.map(b => {
-      const v = m[a + ">" + b] || 0;
-      return a === b ? `<td style="background:#f6f7fa"></td>` : `<td title="${esc(a)} 支援 ${esc(b)}：${v}" style="background:${v ? `rgba(79,70,229,${.12 + .7 * v / max})` : "#fafbfd"};color:${v / max > .5 ? "#fff" : "var(--brand)"}">${v || ""}</td>`;
-    }).join("")}</tr>`).join("")}</table>
-    <div class="muted small" style="margin-top:10px;text-align:center">數字越大、顏色越深，代表該成員越常支援對方。可看出誰負荷較重、誰是關鍵支援者。</div>`;
-}
-
 /* ---------- 模組看板 ---------- */
 function vModules() {
   const M = S.D.modules, secOk = M.filter(m => m.sec === "複測通過").length, up = M.filter(m => m.cloud === "已上架").length, high = M.reduce((s, m) => s + (+m.secHigh || 0), 0);
   const steps = (arr, v) => `<div class="steps">${arr.slice(1).map((s, i) => `<i class="${arr.indexOf(v) > i ? "on" : ""}"></i>`).join("")}</div>`;
   const sc = v => v === "未開始" ? "s-idle" : (v === "複測通過" || v === "已上架") ? "s-ok" : v === "修補中" ? "s-warn" : "s-run";
   return `
-  <div style="margin-bottom:14px"><h1>模組看板</h1><div class="muted small">9 項工具機 AI 模組的資安檢測（查核點 1-1）與雲端上架（查核點 1-2）狀態。點任一模組即可更新，查核點達成數會自動計算。</div></div>
+  <div style="margin-bottom:14px"><button class="link small" data-act="nav" data-v="home">← 返回查核點進度</button><h1 style="margin-top:6px">模組看板</h1><div class="muted small">9 項工具機 AI 模組的資安檢測（查核點 1-1）與雲端上架（查核點 1-2）狀態。點任一模組即可更新，查核點達成數會自動計算。</div></div>
   <div class="grid g3">
     <div class="card kpi"><span class="l">資安檢測複測通過（1-1）</span><span class="v">${secOk}<small>／9</small></span><div class="pbar ${secOk >= 9 ? "ok" : ""}" style="margin-top:6px"><i style="width:${secOk / 9 * 100}%"></i></div></div>
     <div class="card kpi"><span class="l">未修補 Critical／High 弱點</span><span class="v" style="color:${high ? "var(--bad)" : "var(--ok)"}">${high}<small> 個</small></span><span class="d muted">G1 門檻：須為 0 才能進入部署</span></div>
@@ -774,27 +780,6 @@ function vModules() {
     </div>`).join("")}
   </div>
   <div class="muted small" style="margin-top:10px">${M.filter(m => m.updatedAt).length ? "最近更新：" + M.filter(m => m.updatedAt).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3).map(m => `${esc(m.id)}（${esc(m.updatedBy)}，${ago(m.updatedAt)}）`).join("、") : ""}</div>`;
-}
-
-/* ---------- 人員 ---------- */
-function vPeople() {
-  const D = S.D;
-  return `<div style="margin-bottom:14px"><h1>人員分工</h1><div class="muted small">每位成員的主責／協辦工作、負荷與最新回報狀況</div></div>
-  <div class="grid g3">${D.staff.map(p => {
-    const own = D.tasks.filter(t => t.owner === p.name), help = D.tasks.filter(t => t.owner !== p.name && t.helperList.includes(p.name));
-    const last = D.reports.find(r => r.reporter === p.name);
-    const prob = own.filter(t => t.attention).length, hp = D.helps.filter(h => h.helper === p.name && h.status !== "已解決").length;
-    const avg = own.length ? stat(own).actual : 0;
-    const tc = t => `<span class="tchip clickable" data-act="task" data-id="${t.id}"><span class="d" style="background:${t.status === "已完成" ? "var(--ok)" : t.attention ? "var(--bad)" : t.status === "進行中" ? "var(--run)" : "#c9cdd8"}"></span>${esc(t.code)}</span>`;
-    return `<div class="card person">
-      <div class="hd">${av(p.name, "lg")}<div style="flex:1"><div class="nm">${esc(p.name)}</div><div class="small muted">${esc(p.title)}${p.pm ? " · 本區間 " + p.pm + " 人月" : ""}${p.manager ? ' <span class="chip nodot s-brand">主管</span>' : ""}</div></div></div>
-      <div class="small" style="color:var(--ink2)">${esc(p.focus)}</div>
-      <div class="stat3"><div><b>${pct(avg)}</b><span>主責完成率</span></div><div><b style="color:${prob ? "var(--bad)" : "inherit"}">${prob}</b><span>需注意</span></div><div><b>${hp}</b><span>協助他人中</span></div></div>
-      <div class="small muted">主責 ${own.length} 項</div><div class="tlist">${own.map(tc).join("") || '<span class="small muted">—</span>'}</div>
-      <div class="small muted" style="margin-top:10px">協辦 ${help.length} 項</div><div class="tlist">${help.map(tc).join("") || '<span class="small muted">—</span>'}</div>
-      <div class="row between small muted" style="margin-top:12px;border-top:1px solid var(--line2);padding-top:10px"><span>${last ? `最近回報：${ago(last.createdAt)}（${esc((D.taskById[last.taskId] || {}).code || "")}）` : "尚未回報"}</span><button class="link" data-act="who" data-v="${esc(p.name)}">查看工作 →</button></div>
-    </div>`;
-  }).join("")}</div>`;
 }
 
 /* ================= 彈出視窗 ================= */
@@ -814,10 +799,9 @@ function mTask(id) {
   if (!t) return;
   const reps = D.reports.filter(r => r.taskId === id), hs = D.helps.filter(h => h.taskId === id);
   const body = `
-    <div class="row wrap" style="margin-bottom:14px">${taskChip(t)}<span class="chip nodot s-brand">${esc(t.group)}</span>${t.checkpoint ? `<span class="chip nodot s-idle">查核點 ${esc(t.checkpoint)}</span>` : ""}</div>
+    <div class="row wrap" style="margin-bottom:14px">${taskChip(t)}${t.checkpoint ? `<span class="chip nodot s-brand">查核點 ${esc(t.checkpoint)}</span>` : `<span class="chip nodot s-brand">${esc(t.group)}</span>`}</div>
     <dl class="info">
       <dt>主責</dt><dd class="row" style="gap:6px">${av(t.owner)}${esc(t.owner)}</dd>
-      <dt>協辦</dt><dd>${t.helperList.length ? `<span class="row wrap" style="gap:6px">${t.helperList.map(n => av(n) + esc(n)).join("　")}</span>` : "—"}</dd>
       <dt>期程</dt><dd>${md(t.start)}（${wd(t.start)}）– ${md(t.end)}（${wd(t.end)}）${t.status !== "已完成" ? `<span class="muted"> · ${left(t.end) >= 0 ? "剩 " + left(t.end) + " 天" : "逾期 " + (-left(t.end)) + " 天"}</span>` : ""}</dd>
       <dt>交付文件</dt><dd>${esc(t.deliverable) || "—"}</dd>
       <dt>權重</dt><dd>${t.weight}%</dd>
@@ -826,42 +810,36 @@ function mTask(id) {
     <div class="row" style="margin-bottom:6px"><b style="font-size:22px">${t.progress}%</b><span class="muted small">依時程應達 ${t.exp}%</span></div>
     <div class="pbar ${barCls(t)}" style="margin-bottom:20px"><i style="width:${t.progress}%"></i><b style="left:${t.exp}%"></b></div>
     ${hs.length ? `<h3 style="margin-bottom:8px">協助請求</h3>${hs.map(h => `<div class="row small" style="margin-bottom:6px">${av(h.requester)}→${av(h.helper)}<span style="flex:1">${esc(h.content)}</span>${chip(h.status)}</div>`).join("")}<div style="height:12px"></div>` : ""}
-    <h3 style="margin-bottom:12px">回報紀錄 <span class="muted small">（${reps.length}）</span></h3>
+    <h3 style="margin-bottom:12px">工作日誌 <span class="muted small">（${reps.length}）</span></h3>
     ${reps.length ? `<div class="tl">${reps.map(r => `<div class="it">
-      <div class="row wrap" style="gap:8px">${av(r.reporter)}<b>${esc(r.reporter)}</b><span class="muted small">${ago(r.createdAt)}</span>${chip(r.status)}<b class="small">${r.progress}%</b>
+      <div class="row wrap" style="gap:8px">${av(r.reporter)}<b>${esc(r.reporter)}</b><span class="muted small">${md(ymd(new Date(r.createdAt)))} ${new Date(r.createdAt).toTimeString().slice(0, 5)}</span>${delta(r)}<b class="small">→ ${r.progress}%</b>${r.status === "遇到困難" ? chip("遇到困難") : ""}
         ${S.role === "admin" && !S.limited ? `<button type="button" class="link small" style="margin-left:auto;color:var(--muted)" data-act="rep-del" data-id="${r.id}">刪除</button>` : ""}</div>
-      ${r.done ? `<div class="kv"><b>完成：</b>${esc(r.done)}</div>` : ""}
+      ${r.done ? `<div class="kv">${esc(r.done)}</div>` : ""}
       ${r.next ? `<div class="kv"><b>下一步：</b>${esc(r.next)}</div>` : ""}
-      ${r.issue ? `<div class="kv" style="color:var(--bad)"><b style="color:var(--bad)">難題：</b>${esc(r.issue)}</div>` : ""}
+      ${r.issue ? `<div class="kv" style="color:var(--bad)">⚠ ${esc(r.issue)}</div>` : ""}
       ${r.reply ? `<div class="reply"><b>主管回覆：</b>${esc(r.reply)}</div>` : ""}
       ${S.role === "admin" ? `<div class="row" style="margin-top:8px"><input class="inp" id="rp-${r.id}" placeholder="${r.reply ? "修改回覆…" : "給予指示或回覆…"}" style="padding:6px 10px;font-size:14px"><button type="button" class="btn sm" data-act="reply" data-id="${r.id}">送出</button></div>` : ""}
-    </div>`).join("")}</div>` : `<div class="empty">還沒有人回報這項工作</div>`}`;
+    </div>`).join("")}</div>` : `<div class="empty">還沒有工作日誌</div>`}`;
   const foot = `${S.role === "admin" && !S.limited ? `<button type="button" class="btn ghost" data-act="task-edit" data-id="${t.id}" style="margin-right:auto">編輯</button>` : ""}
-    ${S.role === "member" && t.status !== "已完成" ? `<button type="button" class="btn ghost" data-act="help-new" data-id="${t.id}">請求協助</button>` : ""}
-    ${canReport(t) ? `<button type="button" class="btn" data-act="report" data-id="${t.id}">回報進度</button>` : ""}`;
+    ${t.owner === S.me && t.status !== "已完成" ? `<button type="button" class="btn ghost" data-act="help-new" data-id="${t.id}">請求協助</button>` : ""}
+    ${canReport(t) && t.status !== "已完成" ? `<button type="button" class="btn" data-act="report" data-id="${t.id}">${t.owner === S.me ? "寫日誌" : "代為記錄"}</button>` : ""}`;
   modal(`<span class="code" style="font-size:15px">${esc(t.code)}</span> ${esc(t.name)}`, body, foot);
 }
 
 function mReport(id) {
-  const D = S.D, list = D.tasks.filter(t => canReport(t) && t.status !== "已完成");
-  if (!list.length) return toast("目前沒有可回報的工作", true);
-  let t = D.taskById[id] && canReport(D.taskById[id]) ? D.taskById[id] : (list.find(x => x.owner === S.me && x.start <= TODAY) || list[0]);
-  const mineFirst = list.slice().sort((a, b) => (b.owner === S.me) - (a.owner === S.me));
-  const others = D.staff.map(p => p.name).filter(n => n !== S.me);
+  const D = S.D, t = D.taskById[id];
+  if (!t) return;
   const body = `
-    <div class="f"><label>工作項目</label><select name="taskId" data-act-change="rep-task">${mineFirst.map(x => `<option value="${x.id}" ${x.id === t.id ? "selected" : ""}>${esc(x.code)}　${esc(x.name)}${x.owner === S.me ? "" : S.role === "member" ? "（協辦）" : "（" + esc(x.owner) + "）"}</option>`).join("")}</select></div>
-    ${S.role === "admin" ? `<div class="f"><label>回報人</label><select name="reporter">${D.staff.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
-    <div class="f"><label>目前完成度 <span class="muted">上次 ${t.progress}%</span></label>
+    <input type="hidden" name="taskId" value="${t.id}">
+    ${S.role === "admin" ? `<div class="f"><label>記錄人</label><select name="reporter">${D.staff.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
+    <div class="f"><label>今天的工作內容</label><textarea name="done" placeholder="例：完成 M1–M3 SAST 掃描，產出報告 3 份"></textarea></div>
+    <div class="f"><label>完成度 <span class="muted">目前 ${t.progress}%</span></label>
       <div class="slider"><input type="range" name="progress" min="0" max="100" step="5" value="${t.progress}" data-act-input="rep-pg"><output id="pgv">${t.progress}%</output></div>
-      <div class="quick">${[0, 25, 50, 75, 100].map(v => `<button type="button" data-act="pg" data-v="${v}">${v}%</button>`).join("")}</div></div>
-    <div class="f"><label>狀態</label><div class="pick" data-pick="status">${["進行中", "遇到困難", "已完成", "未開始"].map(s => `<button type="button" data-v="${s}" class="${s === (t.status === "遇到困難" ? "遇到困難" : "進行中") ? "on" : ""} ${s === "遇到困難" ? "bad" : s === "已完成" ? "ok" : ""}">${s}</button>`).join("")}</div></div>
-    <div class="f"><label>這次完成了什麼</label><textarea name="done" placeholder="例：完成 M1–M3 SAST 掃描，產出報告 3 份"></textarea></div>
-    <div class="f"><label>下一步計畫</label><textarea name="next" placeholder="例：10/8 前完成 M4–M5 掃描並開始弱點分級"></textarea></div>
-    <div class="f" id="issueBox"><label>遇到的難題 <span class="muted">（沒有可留空；選「遇到困難」時必填）</span></label><textarea name="issue" placeholder="具體描述卡在哪裡、影響什麼、需要什麼資源"></textarea></div>
-    <div class="f"><label>需要誰協助？ <span class="muted">（可複選，會自動送出協助請求）</span></label>
-      <div class="pick" data-pick="helpers" data-multi="1">${others.sort((a, b) => t.helperList.includes(b) - t.helperList.includes(a)).map(n => `<button type="button" data-v="${esc(n)}">${av(n)}${esc(n)}${t.helperList.includes(n) ? '<span class="muted small">協辦</span>' : ""}</button>`).join("")}</div>
-      <input type="text" name="helpText" placeholder="想請對方協助什麼？（留空則使用上方難題說明）" style="margin-top:8px" class="inp"></div>`;
-  modal("回報進度", body, `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">送出回報</button>`, "report");
+      <div class="quick">${[5, 10, 20].map(v => `<button type="button" data-act="pg" data-v="+${v}">+${v}%</button>`).join("")}<button type="button" data-act="pg" data-v="100">完成 ✓</button></div></div>
+    <div class="f"><label>遇到的問題 <span class="muted">（選填）</span></label><textarea name="issue" placeholder="卡在哪裡、影響什麼"></textarea></div>
+    <div class="f"><label>需要誰協助？ <span class="muted">（選填，對方會收到通知）</span></label>
+      <div class="pick" data-pick="helpers" data-multi="1">${D.staff.map(p => p.name).filter(n => n !== t.owner).map(n => `<button type="button" data-v="${esc(n)}">${av(n)}${esc(n)}</button>`).join("")}</div></div>`;
+  modal(`<span class="code" style="font-size:15px">${esc(t.code)}</span> 寫日誌`, body, `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">送出</button>`, "report");
 }
 
 function mHelp(taskId, offer) {
@@ -926,7 +904,7 @@ function mTaskEdit(id) {
     <div class="grid g2" style="gap:0 14px">${inp("code", "編號", t.code)}${inp("group", "分項", t.group)}</div>
     ${inp("name", "工作項目", t.name)}${inp("deliverable", "產出／交付文件", t.deliverable)}
     <div class="grid g2" style="gap:0 14px"><div class="f"><label>主責</label><select name="owner">${S.D.staff.map(p => `<option ${p.name === t.owner ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
-      ${inp("helpers", "協辦（以、分隔）", t.helpers)}${inp("start", "起始日", t.start, "date")}${inp("end", "完成日", t.end, "date")}${inp("weight", "權重 %", t.weight, "number")}${inp("checkpoint", "對應查核點", t.checkpoint)}</div>
+      <input type="hidden" name="helpers" value="${esc(t.helpers)}">${inp("start", "起始日", t.start, "date")}${inp("end", "完成日", t.end, "date")}${inp("weight", "權重 %", t.weight, "number")}${inp("checkpoint", "對應查核點", t.checkpoint)}</div>
     ${inp("note", "備註", t.note)}`,
     `${id ? `<button type="button" class="btn danger" data-act="task-del" data-id="${id}" style="margin-right:auto">刪除</button>` : ""}<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">儲存</button>`, "task");
 }
@@ -968,12 +946,31 @@ document.addEventListener("click", e => {
     case "task-del": if (confirm("確定刪除這個工作項目？（回報紀錄會保留在試算表）")) act("deleteTask", {id}, "已刪除"); break;
     case "rep-del": if (confirm("確定刪除這筆回報？")) act("deleteReport", {id}, "已刪除"); break;
     case "reply": { const val = document.getElementById("rp-" + id).value.trim(); if (!val) return toast("請輸入回覆內容", true); const tid = S.D.reports.find(r => r.id === id).taskId; call("reply", {id, reply: val}).then(() => load()).then(() => { render(); mTask(tid); toast("已回覆"); }).catch(x => toast(x.message, true)); break; }
-    case "pg": setPg(+v); break;
+    case "pg": { const r = document.querySelector('[name="progress"]'); setPg(v[0] === "+" ? Math.min(100, +r.value + +v.slice(1)) : +v); break; }
+    case "logtoggle": { const row = document.querySelector(`.logrow[data-task="${id}"]`); row.classList.toggle("on"); if (row.classList.contains("on")) row.querySelector("textarea").focus(); dailyHint(); break; }
+    case "pgadd": { const r = document.querySelector(`[name="progress_${id}"]`); r.value = +v === 100 ? 100 : Math.min(100, +r.value + +v); logPg(r); break; }
+    case "trange": S.teamRange = v; render(); break;
   }
 });
+function dailyHint() {
+  const on = document.querySelectorAll(".logrow.on").length, h = document.getElementById("dailyHint"), b = document.getElementById("dailyBtn");
+  if (h) h.textContent = on ? `已勾選 ${on} 項工作` : "尚未勾選工作";
+  if (b) { b.disabled = !on; b.textContent = on ? `送出今日日誌（${on} 項）` : "送出今日日誌"; }
+}
+function logPg(r) { const id = r.name.slice(9), d = +r.value - +r.dataset.prev; document.getElementById("pg_" + id).innerHTML = r.value + "%" + (d ? ` <small style="color:var(--ok)">${d > 0 ? "+" : ""}${d}</small>` : ""); }
+async function submitDaily(reps) {
+  const btn = document.getElementById("dailyBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "送出中…"; }
+  try {
+    for (const r of reps) await call("report", {report: r});
+    await load(); render(); window.scrollTo(0, 0);
+    toast(`已送出 ${reps.length} 項日誌${reps.some(r => r.helpers.length) ? "，並已通知協助人" : ""}，辛苦了！`);
+  } catch (e) { toast(e.message || "送出失敗，請稍後再試", true); dailyHint(); }
+}
 function setPg(v) { const r = document.querySelector('[name="progress"]'); if (r) { r.value = v; document.getElementById("pgv").textContent = v + "%"; } }
 document.addEventListener("input", e => {
   if (e.target.dataset.actInput === "rep-pg") document.getElementById("pgv").textContent = e.target.value + "%";
+  if (e.target.dataset.actInput === "log-pg") logPg(e.target);
   const fil = e.target.dataset.fil;
   if (fil === "q") { S.f.q = e.target.value; clearTimeout(S.qt); S.qt = setTimeout(() => { render(); const q = document.querySelector('[data-fil="q"]'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); }
 });
@@ -987,16 +984,26 @@ document.addEventListener("submit", e => {
   if (!kind) return;
   e.preventDefault();
   const fd = Object.fromEntries(new FormData(form));
-  if (kind === "report") {
-    const status = picked(form, "status")[0] || "進行中", helpers = picked(form, "helpers");
-    if (status === "遇到困難" && !fd.issue.trim()) return toast("選「遇到困難」時，請描述遇到的難題", true);
-    if (helpers.length && !fd.issue.trim() && !fd.helpText.trim()) return toast("請說明需要對方協助什麼", true);
-    if (!fd.done.trim() && !fd.next.trim() && !fd.issue.trim()) return toast("請至少填寫一項內容（完成、下一步或難題）", true);
-    act("report", {report: Object.assign(fd, {status, helpers, progress: +fd.progress})}, helpers.length ? `回報完成，已通知 ${helpers.join("、")} 協助` : "回報完成，謝謝！");
+  if (kind === "daily") {
+    const rows = [...form.querySelectorAll(".logrow.on")], reps = [];
+    if (!rows.length) return toast("請先勾選今天有進行的工作", true);
+    for (const row of rows) {
+      const id = row.dataset.task, t = S.D.taskById[id], done = (fd["done_" + id] || "").trim(), issue = (fd["issue_" + id] || "").trim();
+      const progress = +fd["progress_" + id], helpers = picked(form, "helpers_" + id);
+      if (!done) { row.querySelector("textarea").focus(); return toast(`${t.code}：請寫下今天的工作內容`, true); }
+      if (helpers.length && !issue) return toast(`${t.code}：請說明需要協助的問題`, true);
+      reps.push({taskId: id, done, issue, progress, helpers, next: "", status: progress >= 100 ? "已完成" : issue ? "遇到困難" : "進行中"});
+    }
+    submitDaily(reps);
+  } else if (kind === "report") {
+    const helpers = picked(form, "helpers"), progress = +fd.progress;
+    if (!fd.done.trim()) return toast("請寫下今天的工作內容", true);
+    if (helpers.length && !fd.issue.trim()) return toast("請說明需要協助的問題", true);
+    act("report", {report: Object.assign(fd, {helpers, progress, next: "", status: progress >= 100 ? "已完成" : fd.issue.trim() ? "遇到困難" : "進行中"})}, helpers.length ? `已記錄，並通知 ${helpers.join("、")} 協助` : "日誌已記錄，辛苦了！");
   } else if (kind === "help") {
     const helper = picked(form, "helper")[0];
     if (!helper) return toast("請選擇要請誰協助", true);
-    act("help", {help: Object.assign(fd, {helper})}, `已送出，${helper} 會在「我的工作」看到`);
+    act("help", {help: Object.assign(fd, {helper})}, `已送出，${helper} 會在「我的日誌」看到`);
   } else if (kind === "offer") {
     act("help", {help: Object.assign(fd, {offer: true})}, "謝謝你的協助！");
   } else if (kind === "helpUpdate") {
@@ -1060,7 +1067,7 @@ async function start(fromForm) {
     await load();
     if (!DEMO && fromForm) try { localStorage.setItem("pm-pin", S.pin); } catch (e) {}
     let v = ""; try { v = sessionStorage.getItem("pm-view") || ""; } catch (e) {}
-    S.view = navItems().some(i => i[0] === v) ? v : (S.role === "member" ? "my" : "home");
+    S.view = navItems().some(i => i[0] === v) ? v : navItems()[0][0];
     render();
   } catch (e) {
     try { localStorage.removeItem("pm-pin"); localStorage.removeItem("pm-as"); } catch (x) {}

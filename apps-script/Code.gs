@@ -284,7 +284,7 @@ function addHelp_(h, who) {
 function notifyHelp_(requester, helper, task, content) {
   mail_(emailOf_(helper), `${requester} 請你協助${task ? '：' + task.code : ''}`, box_('#c27100',
     `<b>${esc_(requester)}</b> 請你協助${task ? '處理 <b>' + esc_(task.code + ' ' + task.name) + '</b>' : ''}` + quote_(content) +
-    '<p style="margin:12px 0 0">登入後在「我的工作」最上方按「接下協助」，處理完按「回覆／結案」。</p>'));
+    '<p style="margin:12px 0 0">登入後在「我的日誌」最上方按「接下協助」，處理完按「回覆／結案」。</p>'));
 }
 
 function updateHelp_(p, who) {
