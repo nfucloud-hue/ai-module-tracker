@@ -410,9 +410,17 @@ async function load() {
   S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people};
   derive();
 }
+/* 送出中鎖住按鈕，避免連按造成重複資料 */
+function busy(on) {
+  S.busy = on;
+  document.querySelectorAll(".modal .mf .btn:not(.ghost), #dailyBtn").forEach(b => { b.disabled = on; if (on) { b.dataset.t = b.textContent; b.textContent = "送出中…"; } else if (b.dataset.t) b.textContent = b.dataset.t; });
+}
 async function act(action, extra, okMsg) {
+  if (S.busy) return;
+  busy(true);
   try { await call(action, extra); closeModal(); if (okMsg) toast(okMsg); await load(); render(); }
   catch (e) { toast(e.message || "發生錯誤，請稍後再試", true); }
+  finally { busy(false); }
 }
 
 /* ---------- 示範模式：資料存在瀏覽器 ---------- */
@@ -983,11 +991,13 @@ function logPg(r) { const id = r.name.slice(9), d = +r.value - +r.dataset.prev; 
 async function submitDaily(reps) {
   const btn = document.getElementById("dailyBtn");
   if (btn) { btn.disabled = true; btn.textContent = "送出中…"; }
+  S.busy = true;
   try {
     for (const r of reps) await call("report", {report: r});
     await load(); render(); window.scrollTo(0, 0);
     toast(`已送出 ${reps.length} 項日誌${reps.some(r => r.helpers.length) ? "，並已通知協助人" : ""}，辛苦了！`);
   } catch (e) { toast(e.message || "送出失敗，請稍後再試", true); dailyHint(); }
+  finally { S.busy = false; }
 }
 function setPg(v) { const r = document.querySelector('[name="progress"]'); if (r) { r.value = v; document.getElementById("pgv").textContent = v + "%"; } }
 document.addEventListener("input", e => {
@@ -1005,6 +1015,7 @@ document.addEventListener("submit", e => {
   const form = e.target, kind = form.dataset.form;
   if (!kind) return;
   e.preventDefault();
+  if (S.busy) return; // 送出中，忽略重複點擊
   const fd = Object.fromEntries(new FormData(form));
   if (kind === "daily") {
     const rows = [...form.querySelectorAll(".logrow.on")], reps = [];
