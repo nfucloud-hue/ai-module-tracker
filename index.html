@@ -688,7 +688,7 @@ function logRow(t, sec, todays) {
     </div>
     <div class="lb">
       <textarea class="inp ta" name="done_${t.id}" placeholder="今天的工作內容（例：完成 M1–M3 SAST 掃描，產出報告 3 份）"></textarea>
-      <div class="slider" style="margin-top:12px"><span class="small muted nowrap">完成度</span><input type="range" name="progress_${t.id}" min="0" max="100" step="5" value="${t.progress}" data-prev="${t.progress}" data-act-input="log-pg"><output id="pg_${t.id}">${t.progress}%</output></div>
+      <div class="slider" style="margin-top:12px"><span class="small muted nowrap" title="這項工作整體做到幾成，不會自動累加">整體完成度</span><input type="range" name="progress_${t.id}" min="0" max="100" step="5" value="${t.progress}" data-prev="${t.progress}" data-act-input="log-pg"><output id="pg_${t.id}">${t.progress}%</output></div>
       <div class="quick">${[5, 10, 20].map(v => `<button type="button" data-act="pgadd" data-id="${t.id}" data-v="${v}">+${v}%</button>`).join("")}<button type="button" data-act="pgadd" data-id="${t.id}" data-v="100">完成 ✓</button></div>
       <details class="issue-d"><summary>遇到問題或需要協助？</summary>
         <textarea class="inp ta" name="issue_${t.id}" placeholder="卡在哪裡、影響什麼"></textarea>
@@ -1231,11 +1231,23 @@ document.addEventListener("submit", e => {
       if (helpers.length && !issue) return toast(`${t.code}：請說明需要協助的問題`, true);
       reps.push({taskId: id, done, issue, progress, helpers, next: "", status: progress >= 100 ? "已完成" : issue ? "遇到困難" : "進行中"});
     }
+    const same = reps.filter(r => r.progress === S.D.taskById[r.taskId].progress).map(r => S.D.taskById[r.taskId].code);
+    if (same.length && !confirm(`${same.join("、")} 的完成度沒有變動（還是 ${reps.filter(r => same.includes(S.D.taskById[r.taskId].code)).map(r => r.progress + "%").join("、")}）。
+
+完成度不會自動累加，要拉動滑桿或按「+5%」等按鈕。
+
+按「確定」照樣送出，按「取消」回去調整。`)) return;
     submitDaily(reps);
   } else if (kind === "report") {
     const helpers = picked(form, "helpers"), progress = +fd.progress;
     if (!fd.done.trim()) return toast("請寫下今天的工作內容", true);
     if (helpers.length && !fd.issue.trim()) return toast("請說明需要協助的問題", true);
+    const cur = S.D.taskById[fd.taskId];
+    if (cur && progress === cur.progress && !confirm(`完成度沒有變動（還是 ${progress}%）。
+
+完成度不會自動累加，要拉動滑桿或按「+5%」等按鈕。
+
+按「確定」照樣送出，按「取消」回去調整。`)) return;
     act("report", {report: Object.assign(fd, {helpers, progress, next: "", status: progress >= 100 ? "已完成" : fd.issue.trim() ? "遇到困難" : "進行中"})}, helpers.length ? `已記錄，並通知 ${helpers.join("、")} 協助` : "日誌已記錄，辛苦了！");
   } else if (kind === "budget") {
     act("saveBudget", {budget: {id: fd.id, spent: +fd.spent, note: fd.note}}, "經費已更新");
