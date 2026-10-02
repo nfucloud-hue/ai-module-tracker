@@ -401,7 +401,7 @@ async function call(action, extra) {
   if (DEMO) return demoCall(action, extra || {});
   const res = await fetch(API, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({action, pin: S.pin, as: S.as}, extra || {}))});
   const j = await res.json();
-  if (!j.ok) throw new Error(j.error === "pin" ? "密碼不正確" : j.error);
+  if (!j.ok) throw new Error(j.error === "pin" ? (S.as && !S.pin ? "系統已改為專屬連結登入，請使用計畫管理者私訊給你的連結開啟" : "金鑰不正確或已失效，請向計畫管理者索取新的專屬連結") : j.error);
   return j;
 }
 async function load() {
@@ -1062,7 +1062,7 @@ function loginView(err) {
     return;
   }
   const pinForm = (open) => `<form id="lf" class="${open ? "" : "hidden"}" style="margin-top:16px">
-    <div class="f"><label>${S.people && S.people.length ? "主管密碼" : "請輸入你的密碼"}</label><input type="text" inputmode="numeric" autocomplete="off" name="pin" class="inp" style="font-size:20px;letter-spacing:4px;text-align:center"></div>
+    <div class="f"><label>${S.people && S.people.length ? "主管金鑰" : "個人金鑰"}</label><input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" name="pin" class="inp" style="font-size:16px;text-align:center" placeholder="貼上金鑰"></div>
     <button class="btn" style="width:100%">進入</button></form>`;
   const errHtml = err ? `<div style="color:var(--bad);font-size:14px;margin-top:12px">${esc(err)}</div>` : "";
   if (S.people && S.people.length) {
@@ -1071,22 +1071,27 @@ function loginView(err) {
       <div class="muted small">${esc(PROJECT.name)}<br>請點選你的名字進入</div>
       <div class="who-list">${S.people.map(p => `<button data-login="${esc(p.name)}">${av(p.name)}<span>${esc(p.name)}<br><span class="muted small">${esc(p.title)}${p.manager ? " · 主管" : ""}</span></span></button>`).join("")}</div>
       ${errHtml}
-      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /密碼/.test(err))}</div></div>`;
+      <div style="text-align:center;margin-top:16px"><button class="link small" id="adm">主管登入</button></div>${pinForm(!!err && /金鑰/.test(err))}</div></div>`;
     app.querySelectorAll("[data-login]").forEach(b => b.onclick = () => {
       S.as = b.dataset.login; S.pin = ""; try { localStorage.setItem("pm-as", S.as); } catch (e) {} start();
     });
     document.getElementById("adm").onclick = () => document.getElementById("lf").classList.toggle("hidden");
   } else {
     app.innerHTML = `<div class="login"><div class="card"><div class="logo">AI</div><h1>專案進度管理</h1>
-      <div class="muted small">${esc(PROJECT.name)}</div>${pinForm(true)}${errHtml}
-      <div class="muted small" style="margin-top:14px">密碼由計畫管理者提供；使用專屬連結開啟可免輸入。</div></div></div>`;
+      <div class="muted small">${esc(PROJECT.name)}</div>
+      <div class="notice" style="margin:18px 0 6px;line-height:1.7">🔒 本系統僅限計畫成員使用。<br>請點選計畫管理者<b>私訊給你的專屬連結</b>開啟，開啟一次後這台裝置會記住。</div>
+      ${errHtml}
+      <div style="text-align:center;margin-top:14px"><button class="link small" id="adm">已有金鑰？手動輸入</button></div>${pinForm(!!err && /金鑰/.test(err))}</div></div>`;
+    document.getElementById("adm").onclick = () => document.getElementById("lf").classList.toggle("hidden");
   }
   document.getElementById("lf").onsubmit = e => { e.preventDefault(); S.pin = new FormData(e.target).get("pin").trim(); S.as = ""; start(true); };
 }
 async function showLogin(err) {
   // 名單抓不到（例如後端正在重新部署）時重試幾次，避免成員只看到密碼畫面
   for (let i = 0; i < 3 && !(S.people && S.people.length); i++) {
-    try { const j = await call("people"); S.people = (j.people || []).filter(p => !p.manager); } catch (e) { S.people = []; } // 主管不列在名單上，用專屬連結登入
+    let closed = false;
+    try { const j = await call("people"); S.people = (j.people || []).filter(p => !p.manager); closed = j.open === false; } catch (e) { S.people = []; } // 主管不列在名單上，用專屬連結登入
+    if (closed) break; // 已改為專屬連結登入，不顯示名單
     if (!S.people.length && i < 2) await new Promise(r => setTimeout(r, 1500));
   }
   loginView(err);
@@ -1101,7 +1106,7 @@ async function start(fromForm) {
   } catch (e) {
     try { localStorage.removeItem("pm-pin"); localStorage.removeItem("pm-as"); } catch (x) {}
     S.pin = ""; S.as = "";
-    showLogin(e.message === "密碼不正確" ? "密碼不正確，請再確認" : "連線失敗：" + e.message);
+    showLogin(/金鑰|專屬連結|嘗試次數/.test(e.message) ? e.message : "連線失敗：" + e.message);
   }
 }
 (function init() {

@@ -4,7 +4,7 @@
  * 第一次使用：重新整理試算表 → 上方選單「專案管理」→「初始設定（第一次使用）」，再部署為網頁應用程式。
  */
 const SITE_URL = 'https://ai-module-tracker.vercel.app'; // 網站正式網址（產生專屬連結用）
-const OPEN_LOGIN = true; // true＝成員免密碼，登入畫面點名字即可進入（主管功能仍需主管密碼）
+const OPEN_LOGIN = false; // false＝每人須用個人專屬連結（金鑰）登入；true＝登入畫面點名字即可進入（不符個資保護，勿開啟）
 const TZ = 'Asia/Taipei';
 const DIGEST_DAY = ScriptApp.WeekDay.FRIDAY, DIGEST_HOUR = 17; // 每週摘要寄送時間：週五 17:00
 
@@ -20,7 +20,7 @@ const SHEETS = {
   checkpoints: {name: '查核點', cols: ['id', 'due', 'title', 'target', 'current', 'auto', 'note', 'updatedBy', 'updatedAt'],
     head: ['查核點', '完成期限', '查核點概述', '目標值', '目前達成值', '自動計算來源', '備註', '更新人', '更新時間']},
   people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email', 'role'],
-    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人密碼', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）', '角色（主管／空白＝成員）']},
+    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人金鑰（勿外流）', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）', '角色（主管／空白＝成員）']},
 };
 const STATUS = ['未開始', '進行中', '遇到困難', '已完成'];
 const HELP_STATUS = ['待回應', '協助中', '已解決'];
@@ -84,6 +84,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('專案管理')
     .addItem('初始設定（第一次使用）', 'setup')
     .addItem('補發新成員的個人密碼', 'setupPins')
+    .addItem('資安：全部重新產生專屬連結（舊連結失效）', 'rotateKeys')
     .addItem('套用：蘇、覺老師改主管／新增專案管理者', 'migrateManagers')
     .addSeparator()
     .addItem('立即寄出本週摘要（測試）', 'weeklyDigest')
@@ -109,7 +110,7 @@ function setup() {
   if (!c) {
     c = ss.insertSheet('設定');
     c.getRange('A1:B2').setValues([
-      ['主管密碼', pin_([])],
+      ['主管金鑰', token_()],
       ['說明', '主管密碼可看全部、回覆、編輯工作項目。成員各自的密碼在「人員」分頁 E 欄，改密碼直接修改即可，舊連結立即失效。'],
     ]);
     c.getRange('B1').setNumberFormat('@');
@@ -151,7 +152,7 @@ function setupPins() {
   let n = 0;
   rows.forEach((r, i) => {
     if (!r[0].trim()) return;
-    if (!r[4].trim()) { r[4] = pin_(used); used.push(r[4]); n++; }
+    if (!r[4].trim()) { r[4] = token_(); n++; }
     s.getRange(i + 2, 5).setValue(r[4]);
     s.getRange(i + 2, 6).setNumberFormat('General').setFormula('="' + SITE_URL + '/#k="&E' + (i + 2));
   });
@@ -173,8 +174,9 @@ function handle_(p) {
   try {
     if (p.action === 'people') // 登入畫面用的名單（不含密碼）
       return out_({ok: true, open: OPEN_LOGIN, people: OPEN_LOGIN ? read_('people').filter(x => !isMgr_(x)).map(x => ({name: x.name, title: x.title})) : []});
+    if (tooManyFails_()) return out_({ok: false, error: '嘗試次數過多，請 10 分鐘後再試'});
     const who = auth_(p.pin, p.as);
-    if (!who) return out_({ok: false, error: 'pin'});
+    if (!who) { if (p.pin) noteFail_(); return out_({ok: false, error: 'pin'}); }
     const admin = who.role === 'admin';
     const deny = () => out_({ok: false, error: '只有主管可以執行這個動作'});
     const full = admin && !who.limited; // 點名字登入的主管：可看全部、回覆，但不能刪除或修改工作項目
@@ -450,10 +452,34 @@ function adminPin_() {
   const c = SpreadsheetApp.getActive().getSheetByName('設定');
   return c ? String(c.getRange('B1').getDisplayValue()).trim() : '';
 }
-function pin_(used) {
-  let p;
-  do { p = String(Math.floor(100000 + Math.random() * 900000)); } while (used.indexOf(p) >= 0);
-  return p;
+/** 24 碼隨機金鑰（英數字，約 142 位元），取代易被猜中的 6 位數密碼 */
+function token_() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let t = '';
+  for (let i = 0; i < 24; i++) t += chars[Math.floor(Math.random() * chars.length)];
+  return t;
+}
+/** 防暴力猜測：10 分鐘內錯誤超過 100 次即暫停所有金鑰驗證 10 分鐘 */
+function tooManyFails_() { return Number(CacheService.getScriptCache().get('authFails') || 0) >= 100; }
+function noteFail_() { const c = CacheService.getScriptCache(); c.put('authFails', String(Number(c.get('authFails') || 0) + 1), 600); }
+
+/** 全部重新產生金鑰（主管與每位成員），舊連結立即失效。用於首次強化資安或連結外流時。 */
+function rotateKeys() {
+  const ss = SpreadsheetApp.getActive(), c = ss.getSheetByName('設定');
+  c.getRange('A1').setValue('主管金鑰');
+  c.getRange('B1').setNumberFormat('@').setValue(token_());
+  c.getRange('A3:B3').setValues([['主管專屬連結', '="' + SITE_URL + '/#k="&B1']]);
+  c.getRange('A2:B2').setValues([['說明', '請用 B3 主管專屬連結登入（可加入書籤）。成員專屬連結在「人員」F 欄，請個別私訊；連結外流時執行選單「資安：全部重新產生專屬連結」。']]);
+  const s = ss.getSheetByName(SHEETS.people.name);
+  if (s.getLastRow() >= 2) {
+    const rows = s.getRange(2, 1, s.getLastRow() - 1, 1).getDisplayValues();
+    rows.forEach((r, i) => { if (r[0].trim()) s.getRange(i + 2, 5).setNumberFormat('@').setValue(token_()); });
+  }
+  s.getRange(1, 5).setValue('個人金鑰（勿外流）');
+  setupPins();
+  const msg = '已重新產生全部專屬連結，舊連結已失效。主管連結在「設定」B3，成員連結在「人員」F 欄，請個別私訊。';
+  Logger.log(msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* 從編輯器執行時沒有試算表畫面 */ }
 }
 function now_() { return new Date().toISOString(); }
 /** 去除可能被試算表當成公式的開頭字元，並限制長度。 */
