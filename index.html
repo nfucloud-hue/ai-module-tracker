@@ -404,6 +404,8 @@ function taskChip(t) {
   return chip(t.status);
 }
 function barCls(t) { return t.status === "已完成" ? "ok" : (t.blocked || t.overdue) ? "bad" : t.behind ? "warn" : ""; }
+function canEditLog(r) { return (S.role === "admin" && !S.limited) || r.reporter === S.me; }
+function canDelLog(r) { return (S.role === "admin" && !S.limited) || (r.reporter === S.me && ymd(new Date(r.createdAt)) === TODAY); }
 function canReport(t) { return S.role === "admin" || t.owner === S.me; }
 function toast(msg, err) {
   const el = document.createElement("div"); el.className = "toast" + (err ? " err" : ""); el.textContent = msg;
@@ -498,6 +500,7 @@ function demoCall(action, p) {
     }
     case "reply": { const r = find(st.reports, p.id); r.reply = p.reply; r.replyAt = now; break; }
     case "deleteReport": st.reports = st.reports.filter(r => r.id !== p.id); break;
+    case "editReport": { const r = find(st.reports, p.report.id); r.done = p.report.done; r.issue = p.report.issue; r.progress = Math.max(0, Math.min(100, Math.round(+p.report.progress || 0))); r.status = r.progress >= 100 ? "已完成" : r.issue ? "遇到困難" : "進行中"; r.editedAt = now; break; }
     case "saveTask": {
       const t = p.task;
       if (!t.code || !t.name) throw new Error("請填寫編號與工作項目");
@@ -707,6 +710,7 @@ function entry(r, showWho, n) {
     ${r.next ? `<div class="txt muted">下一步：${esc(r.next)}</div>` : ""}
     ${r.issue ? `<div class="txt bad">⚠ ${esc(r.issue)}</div>` : ""}
     ${r.reply ? `<div class="reply"><b>主管回覆：</b>${esc(r.reply)}</div>` : ""}
+    ${r.editedAt || canEditLog(r) ? `<div class="small muted row" style="gap:10px;margin-top:4px">${r.editedAt ? `<span>已修改 ${md(ymd(new Date(r.editedAt)))}</span>` : ""}${canEditLog(r) ? `<button class="link small" data-act="rep-edit" data-id="${r.id}">編輯</button>` : ""}</div>` : ""}
     ${S.role === "admin" && !r.reply ? '<div class="small" style="margin-top:4px;color:var(--brand)">點此回覆</div>' : ""}
   </div>`;
 }
@@ -967,7 +971,7 @@ function mTask(id) {
     <h3 style="margin-bottom:12px">工作日誌 <span class="muted small">（${reps.length}）</span></h3>
     ${reps.length ? groupByDay(reps).map(g => `<div class="day-h" style="margin-top:6px">${dayLabel(g.d)}</div><div class="tl">${g.rs.map((r, i) => `<div class="it">
       <div class="row wrap" style="gap:8px">${num(i + 1)}${av(r.reporter)}<b>${esc(r.reporter)}</b>${delta(r)}<b class="small">→ ${r.progress}%</b>${r.status === "遇到困難" ? chip("遇到困難") : ""}
-        ${S.role === "admin" && !S.limited ? `<button type="button" class="link small" style="margin-left:auto;color:var(--muted)" data-act="rep-del" data-id="${r.id}">刪除</button>` : ""}</div>
+        <span style="margin-left:auto" class="row">${r.editedAt ? `<span class="muted small">已修改</span>` : ""}${canEditLog(r) ? `<button type="button" class="link small" data-act="rep-edit" data-id="${r.id}">編輯</button>` : ""}${canDelLog(r) ? `<button type="button" class="link small" style="color:var(--muted)" data-act="rep-del" data-id="${r.id}">刪除</button>` : ""}</span></div>
       ${r.done ? `<div class="kv">${esc(r.done)}</div>` : ""}
       ${r.next ? `<div class="kv"><b>下一步：</b>${esc(r.next)}</div>` : ""}
       ${r.issue ? `<div class="kv" style="color:var(--bad)">⚠ ${esc(r.issue)}</div>` : ""}
@@ -1024,6 +1028,20 @@ function evCsv(key) {
 }
 function evText(key) {
   return evRows(key).map(({t, e}) => `${t.code} ${t.name}（${t.owner}）\n  ${e ? e.title + "：" + e.url : "⚠ 尚未提供佐證（應交付：" + (t.deliverable || "—") + "）"}`).join("\n");
+}
+
+function mEditLog(id) {
+  const r = S.D.reports.find(x => x.id === id), t = S.D.taskById[r.taskId] || {code: "", name: ""};
+  modal(`<span class="code" style="font-size:15px">${esc(t.code)}</span> 修改日誌`, `
+    <input type="hidden" name="id" value="${esc(r.id)}">
+    <p class="muted small" style="margin-top:0">${esc(t.name)} · ${dayLabel(ymd(new Date(r.createdAt)))}寫的日誌</p>
+    <div class="f"><label>工作內容</label><textarea name="done">${esc(r.done)}</textarea></div>
+    <div class="f"><label>整體完成度 <span class="muted">原本 ${r.progress}%</span></label>
+      <div class="slider"><input type="range" name="progress" min="0" max="100" step="5" value="${r.progress}" data-act-input="rep-pg"><output id="pgv">${r.progress}%</output></div>
+      <div class="quick">${[5, 10, 20].map(v => `<button type="button" data-act="pg" data-v="+${v}">+${v}%</button>`).join("")}<button type="button" data-act="pg" data-v="100">完成 ✓</button></div></div>
+    <div class="f"><label>遇到的問題 <span class="muted">（選填）</span></label><textarea name="issue">${esc(r.issue)}</textarea></div>
+    <div class="muted small">修改後會標示「已修改」。</div>`,
+    `${canDelLog(r) ? `<button type="button" class="btn danger" data-act="rep-del" data-id="${r.id}" style="margin-right:auto">刪除這筆</button>` : ""}<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">儲存修改</button>`, "editlog");
 }
 
 function mReport(id) {
@@ -1156,12 +1174,13 @@ document.addEventListener("click", e => {
     case "cp": mCheckpoint(id); break;
     case "task-edit": mTaskEdit(id); break;
     case "task-del": if (confirm("確定刪除這個工作項目？（回報紀錄會保留在試算表）")) act("deleteTask", {id}, "已刪除"); break;
-    case "rep-del": if (confirm("確定刪除這筆回報？")) act("deleteReport", {id}, "已刪除"); break;
+    case "rep-del": if (confirm("確定刪除這筆日誌？刪除後無法復原。")) act("deleteReport", {id}, "已刪除"); break;
     case "reply": { const val = document.getElementById("rp-" + id).value.trim(); if (!val) return toast("請輸入回覆內容", true); const tid = S.D.reports.find(r => r.id === id).taskId; call("reply", {id, reply: val}).then(() => load()).then(() => { render(); mTask(tid); toast("已回覆"); }).catch(x => toast(x.message, true)); break; }
     case "pg": { const r = document.querySelector('[name="progress"]'); setPg(v[0] === "+" ? Math.min(100, +r.value + +v.slice(1)) : +v); break; }
     case "logtoggle": { const row = document.querySelector(`.logrow[data-task="${id}"]`); row.classList.toggle("on"); if (row.classList.contains("on")) row.querySelector("textarea").focus(); dailyHint(); break; }
     case "pgadd": { const r = document.querySelector(`[name="progress_${id}"]`); r.value = +v === 100 ? 100 : Math.min(100, +r.value + +v); logPg(r); break; }
     case "trange": S.teamRange = v; render(); break;
+    case "rep-edit": mEditLog(id); break;
     case "bud-edit": mBudget(id); break;
     case "mm-edit": mManMonths(); break;
     case "ev-list": mEvidence(v || ""); break;
@@ -1249,6 +1268,9 @@ document.addEventListener("submit", e => {
 
 按「確定」照樣送出，按「取消」回去調整。`)) return;
     act("report", {report: Object.assign(fd, {helpers, progress, next: "", status: progress >= 100 ? "已完成" : fd.issue.trim() ? "遇到困難" : "進行中"})}, helpers.length ? `已記錄，並通知 ${helpers.join("、")} 協助` : "日誌已記錄，辛苦了！");
+  } else if (kind === "editlog") {
+    if (!fd.done.trim()) return toast("請寫下工作內容", true);
+    act("editReport", {report: {id: fd.id, done: fd.done, issue: fd.issue, progress: +fd.progress}}, "日誌已修改");
   } else if (kind === "budget") {
     act("saveBudget", {budget: {id: fd.id, spent: +fd.spent, note: fd.note}}, "經費已更新");
   } else if (kind === "mm") {

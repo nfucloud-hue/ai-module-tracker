@@ -11,8 +11,8 @@ const DIGEST_DAY = ScriptApp.WeekDay.FRIDAY, DIGEST_HOUR = 17; // 每週摘要�
 const SHEETS = {
   tasks: {name: '工作項目', cols: ['id', 'code', 'group', 'name', 'deliverable', 'owner', 'helpers', 'start', 'end', 'weight', 'checkpoint', 'note'],
     head: ['ID', '編號', '分項', '工作項目', '產出／交付文件', '主責', '協辦（以、分隔）', '起始日', '完成日', '權重%', '對應查核點', '備註']},
-  reports: {name: '回報紀錄', cols: ['id', 'createdAt', 'taskId', 'reporter', 'progress', 'status', 'done', 'next', 'issue', 'reply', 'replyAt'],
-    head: ['ID', '回報時間', '工作項目ID', '回報人', '完成度%', '狀態', '本次完成', '下一步', '遇到的難題', '主管回覆', '回覆時間']},
+  reports: {name: '回報紀錄', cols: ['id', 'createdAt', 'taskId', 'reporter', 'progress', 'status', 'done', 'next', 'issue', 'reply', 'replyAt', 'editedAt'],
+    head: ['ID', '回報時間', '工作項目ID', '回報人', '完成度%', '狀態', '本次完成', '下一步', '遇到的難題', '主管回覆', '回覆時間', '修改時間']},
   helps: {name: '協助請求', cols: ['id', 'createdAt', 'taskId', 'requester', 'helper', 'content', 'status', 'response', 'updatedAt'],
     head: ['ID', '建立時間', '工作項目ID', '請求人', '協助人', '需要協助的內容', '狀態', '協助回覆', '更新時間']},
   modules: {name: '模組看板', cols: ['id', 'name', 'owner', 'sec', 'secHigh', 'cloud', 'note', 'updatedBy', 'updatedAt'],
@@ -215,7 +215,8 @@ function handle_(p) {
       case 'saveManMonths': return finEdit ? locked_(() => saveManMonths_(p.month, p.values || {}, who)) : out_({ok: false, error: '只有主管與經費負責人可以登錄人月'});
       case 'report': return locked_(() => addReport_(p.report || {}, who));
       case 'reply': return admin ? locked_(() => replyReport_(p.id, p.reply)) : deny();
-      case 'deleteReport': return full ? locked_(() => deleteRow_('reports', p.id)) : admin ? denyFull() : deny();
+      case 'deleteReport': return locked_(() => deleteReport_(p.id, who, full));
+      case 'editReport': return locked_(() => editReport_(p.report || {}, who, full));
       case 'saveTask': return full ? locked_(() => saveTask_(p.task || {})) : admin ? denyFull() : deny();
       case 'deleteTask': return full ? locked_(() => deleteRow_('tasks', p.id)) : admin ? denyFull() : deny();
       case 'help': return locked_(() => addHelp_(p.help || {}, who));
@@ -289,6 +290,27 @@ function addReport_(r, who) {
       `<p style="margin:12px 0 0">登入後到「工作進度」點 ${esc_(task.code)} 即可回覆指示。</p>`));
   }
   return out_({ok: true, id: row.id});
+}
+
+/** 修改日誌：本人或主管；完成度、內容、問題可改，並記錄修改時間 */
+function editReport_(r, who, full) {
+  const old = read_('reports').filter(x => x.id === String(r.id))[0];
+  if (!old) return out_({ok: false, error: '找不到這筆日誌'});
+  if (!full && old.reporter !== who.name) return out_({ok: false, error: '只能修改自己寫的日誌'});
+  if (!String(r.done || '').trim()) return out_({ok: false, error: '請寫下工作內容'});
+  const progress = Math.max(0, Math.min(100, Math.round(Number(r.progress) || 0))), issue = clean_(r.issue, 2000);
+  return patch_('reports', old.id, {done: clean_(r.done, 2000), issue: issue, progress: String(progress),
+    status: progress >= 100 ? '已完成' : issue ? '遇到困難' : '進行中', editedAt: now_()});
+}
+/** 刪除日誌：主管可刪任何一筆；本人只能刪當天寫的 */
+function deleteReport_(id, who, full) {
+  const r = read_('reports').filter(x => x.id === String(id))[0];
+  if (!r) return out_({ok: false, error: '找不到這筆日誌'});
+  if (!full) {
+    if (r.reporter !== who.name) return out_({ok: false, error: '只能刪除自己寫的日誌'});
+    if (ymdTz_(new Date(r.createdAt)) !== ymdTz_(new Date())) return out_({ok: false, error: '只能刪除當天寫的日誌，之前的請改用「編輯」'});
+  }
+  return deleteRow_('reports', r.id);
 }
 
 function replyReport_(id, text) {
