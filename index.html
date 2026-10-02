@@ -207,6 +207,7 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .issue-d textarea{margin-top:8px}
 .more{margin-top:14px}
 .more .mini{display:flex;gap:10px;align-items:center;padding:9px 8px;border-bottom:1px solid var(--line2);font-size:14px;border-radius:8px}
+.num{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:700;flex:none}
 .delta{color:var(--ok);font-weight:700;font-size:13px}
 .delta.neg{color:var(--bad)}.delta.zero{color:var(--muted);font-weight:400}
 .day{margin-bottom:18px}
@@ -584,6 +585,15 @@ function sections() {
     return Object.assign(stat(ts, name), {key: k, cps, due: cps.length ? cps[0].due : ts.reduce((m, t) => t.end > m ? t.end : m, "")});
   });
 }
+/* 日誌依日期分組：日期由新到舊，同一天內依寫的先後排列（供編號） */
+function groupByDay(list) {
+  const days = [], map = {};
+  list.forEach(r => { const d = ymd(new Date(r.createdAt)); if (!map[d]) { map[d] = []; days.push(d); } map[d].push(r); });
+  days.sort((a, b) => b.localeCompare(a));
+  return days.map(d => ({d, rs: map[d].slice().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))}));
+}
+function dayLabel(d) { return (d === TODAY ? "今天" : d === addDays(TODAY, -1) ? "昨天" : md(d)) + "（" + wd(d) + "）"; }
+function num(n) { return `<span class="num">${n}</span>`; }
 function delta(r) { return r.delta > 0 ? `<span class="delta">+${r.delta}%</span>` : r.delta < 0 ? `<span class="delta neg">${r.delta}%</span>` : `<span class="delta zero">±0</span>`; }
 function loggedOn(name, day) { return S.D.reports.some(r => r.reporter === name && ymd(new Date(r.createdAt)) === day); }
 /* 某天「應該寫日誌」的人：當天有進行中主責工作的執行人員 */
@@ -603,8 +613,7 @@ function vMy() {
   const toMe = D.helps.filter(h => h.helper === me && h.status !== "已解決");
   const myLogs = D.reports.filter(r => r.reporter === me);
   const today = myLogs.filter(r => ymd(new Date(r.createdAt)) === TODAY);
-  const byDay = {};
-  myLogs.slice(0, 40).forEach(r => { const d = ymd(new Date(r.createdAt)); (byDay[d] = byDay[d] || []).push(r); });
+  const byDay = groupByDay(myLogs.slice(0, 60));
   const secName = k => { const s = sections().find(x => x.key === (k || "")); return s ? (s.key ? "查核點 " + s.key : s.name) : ""; };
   return `
   <section class="hero">
@@ -619,8 +628,8 @@ function vMy() {
   ${later.length ? `<details class="more"><summary>之後的主責工作（${later.length}）</summary>${later.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span><span class="muted small nowrap">${md(t.start)} 開始</span></div>`).join("")}</details>` : ""}
   ${done.length ? `<details class="more"><summary>已完成（${done.length}）</summary>${done.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span>${chip("已完成")}</div>`).join("")}</details>` : ""}
   <h2>我的日誌紀錄</h2>
-  ${Object.keys(byDay).length ? Object.keys(byDay).map(d => `<div class="day"><div class="day-h">${d === TODAY ? "今天" : d === addDays(TODAY, -1) ? "昨天" : md(d)}（${wd(d)}）</div>
-    ${byDay[d].map(r => entry(r, false)).join("")}</div>`).join("") : `<div class="card empty">還沒有日誌，從上面勾選第一項工作開始吧</div>`}`;
+  ${byDay.length ? byDay.map(g => `<div class="day"><div class="day-h">${dayLabel(g.d)}<span class="muted" style="font-weight:400"> · ${g.rs.length} 筆</span></div>
+    ${g.rs.map((r, i) => entry(r, false, i + 1)).join("")}</div>`).join("") : `<div class="card empty">還沒有日誌，從上面勾選第一項工作開始吧</div>`}`;
 }
 function logRow(t, sec, todays) {
   const d = left(t.end), when = TODAY < t.start ? `${md(t.start)} 開始` : d < 0 ? `<b style="color:var(--bad)">逾期 ${-d} 天</b>` : d === 0 ? "<b>今天到期</b>" : `剩 ${d} 天`;
@@ -644,15 +653,15 @@ function logRow(t, sec, todays) {
   </div>`;
 }
 /* 一筆日誌（showWho：團隊日誌顯示人名） */
-function entry(r, showWho) {
+function entry(r, showWho, n) {
   const t = S.D.taskById[r.taskId] || {code: "", name: "（已刪除的工作）"};
   return `<div class="entry clickable" data-act="task" data-id="${esc(r.taskId)}">
-    <div class="row wrap" style="gap:8px">${showWho ? "" : ""}<span class="code">${esc(t.code)}</span><span style="flex:1;min-width:0" class="ellip">${esc(t.name)}</span>${delta(r)}<b class="small">${r.progress}%</b></div>
+    <div class="row wrap" style="gap:8px">${n ? num(n) : ""}<span class="code">${esc(t.code)}</span><span style="flex:1;min-width:0" class="ellip">${esc(t.name)}</span>${delta(r)}<b class="small">${r.progress}%</b></div>
     ${r.done ? `<div class="txt">${esc(r.done)}</div>` : ""}
     ${r.next ? `<div class="txt muted">下一步：${esc(r.next)}</div>` : ""}
     ${r.issue ? `<div class="txt bad">⚠ ${esc(r.issue)}</div>` : ""}
     ${r.reply ? `<div class="reply"><b>主管回覆：</b>${esc(r.reply)}</div>` : ""}
-    <div class="small muted" style="margin-top:4px">${new Date(r.createdAt).toTimeString().slice(0, 5)}${S.role === "admin" && !r.reply ? ' · <span style="color:var(--brand)">點此回覆</span>' : ""}</div>
+    ${S.role === "admin" && !r.reply ? '<div class="small" style="margin-top:4px;color:var(--brand)">點此回覆</div>' : ""}
   </div>`;
 }
 
@@ -725,7 +734,7 @@ function vTeam() {
     return `<div class="day"><div class="day-h">${d === TODAY ? "今天" : d === addDays(TODAY, -1) ? "昨天" : md(d)}（${wd(d)}）</div>
       <div class="grid g2">${ppl.map(n => {
         const rs = logs.filter(r => r.reporter === n && ymd(new Date(r.createdAt)) === d);
-        return `<div class="card person-log"><div class="row" style="gap:8px;margin-bottom:4px">${av(n)}<b>${esc(n)}</b><span class="muted small">${rs.length} 項</span></div>${rs.map(r => entry(r, true)).join("")}</div>`;
+        return `<div class="card person-log"><div class="row" style="gap:8px;margin-bottom:4px">${av(n)}<b>${esc(n)}</b><span class="muted small">${rs.length} 筆</span></div>${rs.slice().sort((x, y) => String(x.createdAt).localeCompare(String(y.createdAt))).map((r, i) => entry(r, true, i + 1)).join("")}</div>`;
       }).join("")}</div></div>`;
   }).join("") : `<div class="card empty">${range === "today" ? "今天還沒有人寫日誌" : "這段期間沒有日誌"}</div>`}`;
 }
@@ -828,15 +837,15 @@ function mTask(id) {
     <div class="pbar ${barCls(t)}" style="margin-bottom:20px"><i style="width:${t.progress}%"></i><b style="left:${t.exp}%"></b></div>
     ${hs.length ? `<h3 style="margin-bottom:8px">協助請求</h3>${hs.map(h => `<div class="row small" style="margin-bottom:6px">${av(h.requester)}→${av(h.helper)}<span style="flex:1">${esc(h.content)}</span>${chip(h.status)}</div>`).join("")}<div style="height:12px"></div>` : ""}
     <h3 style="margin-bottom:12px">工作日誌 <span class="muted small">（${reps.length}）</span></h3>
-    ${reps.length ? `<div class="tl">${reps.map(r => `<div class="it">
-      <div class="row wrap" style="gap:8px">${av(r.reporter)}<b>${esc(r.reporter)}</b><span class="muted small">${md(ymd(new Date(r.createdAt)))} ${new Date(r.createdAt).toTimeString().slice(0, 5)}</span>${delta(r)}<b class="small">→ ${r.progress}%</b>${r.status === "遇到困難" ? chip("遇到困難") : ""}
+    ${reps.length ? groupByDay(reps).map(g => `<div class="day-h" style="margin-top:6px">${dayLabel(g.d)}</div><div class="tl">${g.rs.map((r, i) => `<div class="it">
+      <div class="row wrap" style="gap:8px">${num(i + 1)}${av(r.reporter)}<b>${esc(r.reporter)}</b>${delta(r)}<b class="small">→ ${r.progress}%</b>${r.status === "遇到困難" ? chip("遇到困難") : ""}
         ${S.role === "admin" && !S.limited ? `<button type="button" class="link small" style="margin-left:auto;color:var(--muted)" data-act="rep-del" data-id="${r.id}">刪除</button>` : ""}</div>
       ${r.done ? `<div class="kv">${esc(r.done)}</div>` : ""}
       ${r.next ? `<div class="kv"><b>下一步：</b>${esc(r.next)}</div>` : ""}
       ${r.issue ? `<div class="kv" style="color:var(--bad)">⚠ ${esc(r.issue)}</div>` : ""}
       ${r.reply ? `<div class="reply"><b>主管回覆：</b>${esc(r.reply)}</div>` : ""}
       ${S.role === "admin" ? `<div class="row" style="margin-top:8px"><input class="inp" id="rp-${r.id}" placeholder="${r.reply ? "修改回覆…" : "給予指示或回覆…"}" style="padding:6px 10px;font-size:14px"><button type="button" class="btn sm" data-act="reply" data-id="${r.id}">送出</button></div>` : ""}
-    </div>`).join("")}</div>` : `<div class="empty">還沒有工作日誌</div>`}`;
+    </div>`).join("")}</div>`).join("") : `<div class="empty">還沒有工作日誌</div>`}`;
   const foot = `${S.role === "admin" && !S.limited ? `<button type="button" class="btn ghost" data-act="task-edit" data-id="${t.id}" style="margin-right:auto">編輯</button>` : ""}
     ${t.owner === S.me && t.status !== "已完成" ? `<button type="button" class="btn ghost" data-act="help-new" data-id="${t.id}">請求協助</button>` : ""}
     ${canReport(t) && t.status !== "已完成" ? `<button type="button" class="btn" data-act="report" data-id="${t.id}">${t.owner === S.me ? "寫日誌" : "代為記錄"}</button>` : ""}`;
