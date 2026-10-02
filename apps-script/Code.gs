@@ -21,8 +21,12 @@ const SHEETS = {
     head: ['ID', '工作項目ID', '檔案名稱', '連結', '上傳人', '上傳時間']},
   checkpoints: {name: '查核點', cols: ['id', 'due', 'title', 'target', 'current', 'auto', 'note', 'updatedBy', 'updatedAt'],
     head: ['查核點', '完成期限', '查核點概述', '目標值', '目前達成值', '自動計算來源', '備註', '更新人', '更新時間']},
-  people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email', 'role'],
-    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人金鑰（勿外流）', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）', '角色（主管／空白＝成員）']},
+  people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email', 'role', 'pmTotal'],
+    head: ['姓名', '職級', '本區間人月', '本區間工作重點', '個人金鑰（勿外流）', '專屬連結（複製後私訊給本人）', '通知 Email（收協助請求與主管回覆）', '角色（主管／空白＝成員）', '全期計畫人月（人力需求表）']},
+  budget: {name: '經費執行', cols: ['id', 'item', 'group', 'budget', 'spent', 'note', 'updatedBy', 'updatedAt'],
+    head: ['ID', '科目', '款（不得相互流用）', '預算數', '已執行數', '備註', '更新人', '更新時間']},
+  manmonths: {name: '人月投入', cols: ['id', 'name', 'month', 'mm', 'updatedBy', 'updatedAt'],
+    head: ['ID', '姓名', '月份', '實際投入人月', '更新人', '更新時間']},
 };
 const STATUS = ['未開始', '進行中', '遇到困難', '已完成'];
 const HELP_STATUS = ['待回應', '協助中', '已解決'];
@@ -63,6 +67,17 @@ const SEED_PEOPLE = [
   ['周芷涵', '助理研究員', 0.6, '推廣型錄與上架素材製作、說明會辦理'],
   ['林永祥', '助理研究員', 0.6, '案例與擴散家數統計、查核點佐證文件彙整'],
 ];
+const SEED_BUDGET = [ // [id, 科目, 款, 預算數]（計畫書 參、經費預算表）
+  ['salary', '直接薪資', '直接薪資', 669322],
+  ['mgmt', '管理費用', '管理費用', 666750],
+  ['travel', '旅運費', '其他直接費用', 75000],
+  ['material', '材料費', '其他直接費用', 1150000],
+  ['tech', '業務費－專業技術服務', '其他直接費用', 660000],
+  ['outsource', '業務費－代辦加工費', '其他直接費用', 450000],
+  ['fee', '業務費－出席費', '其他直接費用', 100000],
+  ['misc', '業務費－郵電、消耗品、印刷、印花稅及雜支', '其他直接費用', 38928],
+];
+const PM_TOTAL = {'蘇順豐': 3, '覺文郁': 3, '郭泰均': 2.4, '許禮維': 2.4, '王振宇': 2.4, '莊嘉雲': 2, '周芷涵': 1, '林永祥': 1}; // 人力需求表，合計 17.2
 const SEED_MODULES = [
   ['M1', 'CNC設備保養精度維護與調教生成式虛擬助手', '郭泰均'],
   ['M2', '綜合加工機操作助手', '郭泰均'],
@@ -96,8 +111,8 @@ function onOpen() {
 /** 第一次使用時執行一次：建立分頁、匯入工作彙整表、產生密碼。可重複執行，不會覆蓋已有資料。 */
 function setup() {
   const ss = SpreadsheetApp.getActive();
-  const seed = {tasks: SEED_TASKS, modules: SEED_MODULES.map(m => [m[0], m[1], m[2], '未開始', 0, '未開始', '', '', '']),
-    checkpoints: SEED_CHECKPOINTS.map(c => c.concat(['', '', ''])), people: SEED_PEOPLE.map(p => p.slice(0, 4).concat(['', '', '', p[4] || '']))};
+  const seed = {budget: SEED_BUDGET.map(b => b.concat([0, '', '', ''])), tasks: SEED_TASKS, modules: SEED_MODULES.map(m => [m[0], m[1], m[2], '未開始', 0, '未開始', '', '', '']),
+    checkpoints: SEED_CHECKPOINTS.map(c => c.concat(['', '', ''])), people: SEED_PEOPLE.map(p => p.slice(0, 4).concat(['', '', '', p[4] || '', '']))};
   Object.keys(SHEETS).forEach(k => {
     const def = SHEETS[k];
     let s = ss.getSheetByName(def.name);
@@ -122,6 +137,11 @@ function setup() {
   if (!String(c.getRange('A4').getDisplayValue()).trim()) {
     c.getRange('A4:C4').setValues([['主管通知 Email', Session.getEffectiveUser().getEmail(), '← 卡關通知與每週摘要寄到這裡，多個以逗號分隔']]);
   }
+  // 全期計畫人月：空白者依人力需求表補上
+  const ps = ss.getSheetByName(SHEETS.people.name), pcol = SHEETS.people.cols.indexOf('pmTotal') + 1;
+  if (ps.getLastRow() >= 2) ps.getRange(2, 1, ps.getLastRow() - 1, pcol).getDisplayValues().forEach((r, i) => {
+    if (!String(r[pcol - 1]).trim() && PM_TOTAL[r[0].trim()] != null) ps.getRange(i + 2, pcol).setValue(String(PM_TOTAL[r[0].trim()]));
+  });
   // 每週摘要：先移除舊的排程再建立，避免重複寄送
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'weeklyDigest').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('weeklyDigest').timeBased().onWeekDay(DIGEST_DAY).atHour(DIGEST_HOUR).inTimezone(TZ).create();
@@ -184,7 +204,9 @@ function handle_(p) {
     const full = admin && !who.limited; // 點名字登入的主管：可看全部、回覆，但不能刪除或修改工作項目
     const denyFull = () => out_({ok: false, error: '刪除與修改工作項目請用「主管登入」或主管專屬連結'});
     switch (p.action) {
-      case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name, limited: !!who.limited}, readAll_()));
+      case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name, limited: !!who.limited}, readAll_(), admin ? readFinance_() : {}));
+      case 'saveBudget': return full ? locked_(() => saveBudget_(p.budget || {}, who)) : admin ? denyFull() : deny();
+      case 'saveManMonths': return full ? locked_(() => saveManMonths_(p.month, p.values || {}, who)) : admin ? denyFull() : deny();
       case 'report': return locked_(() => addReport_(p.report || {}, who));
       case 'reply': return admin ? locked_(() => replyReport_(p.id, p.reply)) : deny();
       case 'deleteReport': return full ? locked_(() => deleteRow_('reports', p.id)) : admin ? denyFull() : deny();
@@ -420,6 +442,33 @@ function dn_(s) { return Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8
 function md_(s) { return +s.slice(5, 7) + '/' + +s.slice(8, 10); }
 
 /* ---------- helpers ---------- */
+/* ---------- 經費與人月（僅主管） ---------- */
+function readFinance_() {
+  return {
+    budget: read_('budget').map(b => Object.assign(b, {budget: Number(b.budget) || 0, spent: Number(b.spent) || 0})),
+    manmonths: read_('manmonths').map(m => Object.assign(m, {mm: Number(m.mm) || 0})),
+    pmPlan: read_('people').map(p => ({name: p.name, title: p.title, plan: Number(p.pmTotal) || 0})).filter(p => p.plan > 0),
+  };
+}
+function saveBudget_(b, who) {
+  const spent = Number(b.spent);
+  if (!(spent >= 0) || spent > 1e9) return out_({ok: false, error: '已執行數需為 0 以上的數字'});
+  return patch_('budget', b.id, {spent: String(Math.round(spent)), note: clean_(b.note, 300), updatedBy: who.name || '主管', updatedAt: now_()});
+}
+/** 一次登錄某月份每人的實際投入人月（values: {姓名: 人月}） */
+function saveManMonths_(month, values, who) {
+  if (!/^\d{4}-\d{2}$/.test(String(month))) return out_({ok: false, error: '月份格式錯誤'});
+  const names = read_('people').map(p => p.name), rows = read_('manmonths');
+  Object.keys(values).forEach(n => {
+    if (names.indexOf(n) < 0) return;
+    const mm = Math.max(0, Math.min(1, Number(values[n]) || 0)); // 單月單人最多 1 人月
+    const ex = rows.filter(r => r.name === n && r.month === month)[0];
+    if (ex) patch_('manmonths', ex.id, {mm: String(mm), updatedBy: who.name || '主管', updatedAt: now_()});
+    else if (mm > 0) append_('manmonths', {id: Utilities.getUuid(), name: n, month: month, mm: String(mm), updatedBy: who.name || '主管', updatedAt: now_()});
+  });
+  return out_({ok: true});
+}
+
 /* ---------- 佐證檔案 ---------- */
 function addEvidence_(e, who) {
   const task = read_('tasks').filter(t => t.id === String(e.taskId))[0];

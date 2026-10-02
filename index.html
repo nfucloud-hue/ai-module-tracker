@@ -218,6 +218,17 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .evn{font-size:12px;color:var(--ok);font-weight:500;white-space:nowrap}
 .evn.miss{color:var(--warn)}
 @media (max-width:760px){.ev-add{grid-template-columns:1fr}}
+.pbar.fin{height:12px;margin:4px 0 12px}
+.fin-t{margin-top:4px}
+.fin-r{display:grid;grid-template-columns:150px 1fr 130px 120px;gap:12px;align-items:center;padding:10px 4px;border-top:1px solid var(--line2)}
+.fin-h{font-size:12px;color:var(--muted);border-top:0;padding-top:0}
+.num-c{text-align:right}
+.mchips{display:flex;gap:4px;flex-wrap:wrap}
+.mchip{font-size:12px;background:var(--line2);color:var(--muted);border-radius:6px;padding:1px 7px}
+.mchip.on{background:var(--brand-soft);color:var(--brand);font-weight:500}
+.fin-g{padding:12px 0 6px;border-top:1px solid var(--line)}
+.fin-i{display:grid;grid-template-columns:1fr 160px 140px;gap:12px;align-items:center;padding:7px 6px;border-radius:8px;font-size:14px}
+@media (max-width:760px){.fin-r{grid-template-columns:1fr auto}.fin-r>.mchips{grid-column:1/-1;order:3}.fin-h{display:none}.fin-i{grid-template-columns:1fr auto}.fin-i .pbar{grid-column:1/-1}}
 .delta{color:var(--ok);font-weight:700;font-size:13px}
 .delta.neg{color:var(--bad)}.delta.zero{color:var(--muted);font-weight:400}
 .day{margin-bottom:18px}
@@ -342,6 +353,7 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 const API = String(window.API_URL || "").trim();
 const DEMO = !API || /[?&]demo\b/.test(location.search); // 網址加 ?demo 可試用示範模式（資料只存在本機）
 const PROJECT = {name: "AI模組跨領域應用推廣計畫", no: "115A163-B06", start: "2026-10-01", end: "2026-11-30"};
+const PERIOD = {start: "2026-08-18", end: "2026-12-11", months: ["2026-08", "2026-09", "2026-10", "2026-11", "2026-12"]}; // 契約期程（經費、人月以全期計）
 const MEETINGS = ["2026-10-09", "2026-10-23", "2026-11-06", "2026-11-20", "2026-11-30"];
 const STATUS = ["未開始", "進行中", "遇到困難", "已完成"];
 const SEC = ["未開始", "檢測中", "修補中", "複測通過"];
@@ -403,6 +415,7 @@ const ICON = {
   work: '<path d="M4 6h10M4 12h16M4 18h7"/>',
   collab: '<path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a6 6 0 0 1 12 0m-2-5.6A6 6 0 0 1 22 20"/>',
   mod: '<path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/>',
+  money: '<path d="M12 3v18M16.5 7.5c0-1.7-2-2.8-4.5-2.8S7.5 5.8 7.5 7.5s2 2.4 4.5 2.8 4.5 1.4 4.5 3.2-2 3-4.5 3-4.5-1.2-4.5-3"/>',
   people: '<path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1m7-9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm11 9v-1a4 4 0 0 0-3-3.9M15 3.1a4 4 0 0 1 0 7.8"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">${ICON[k]}</svg>`;
@@ -418,7 +431,7 @@ async function call(action, extra) {
 async function load() {
   const j = await call("data");
   S.role = j.role; S.me = j.me || ""; S.limited = !!j.limited;
-  S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people, evidence: j.evidence || []};
+  S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people, evidence: j.evidence || [], budget: j.budget || null, manmonths: j.manmonths || [], pmPlan: j.pmPlan || []};
   derive();
 }
 /* 送出中鎖住按鈕，避免連按造成重複資料 */
@@ -458,6 +471,13 @@ function demoSeed() {
     {id: "h2", createdAt: h(18), taskId: "c1", requester: "周芷涵", helper: "林永祥", content: "協助整理 6 項 114 年度模組的操作截圖，放入型錄。", status: "協助中", response: "已截好 M1–M3，週五前補齊。", updatedAt: h(8)},
   ];
   st.modules[0].sec = "檢測中"; st.modules[1].sec = "檢測中";
+  st.budget = [["salary", "直接薪資", "直接薪資", 669322, 210000], ["mgmt", "管理費用", "管理費用", 666750, 333375], ["travel", "旅運費", "其他直接費用", 75000, 12500],
+    ["material", "材料費", "其他直接費用", 1150000, 380000], ["tech", "業務費－專業技術服務", "其他直接費用", 660000, 132000], ["outsource", "業務費－代辦加工費", "其他直接費用", 450000, 0],
+    ["fee", "業務費－出席費", "其他直接費用", 100000, 15000], ["misc", "業務費－郵電、消耗品、印刷、印花稅及雜支", "其他直接費用", 38928, 4200]]
+    .map(b => ({id: b[0], item: b[1], group: b[2], budget: b[3], spent: b[4], note: "", updatedBy: "", updatedAt: ""}));
+  st.pmPlan = [["蘇順豐", "計畫主持人", 3], ["覺文郁", "共同主持人", 3], ["郭泰均", "助理研究員", 2.4], ["許禮維", "助理研究員", 2.4], ["王振宇", "助理研究員", 2.4], ["莊嘉雲", "助理研究員", 2], ["周芷涵", "助理研究員", 1], ["林永祥", "助理研究員", 1]].map(p => ({name: p[0], title: p[1], plan: p[2]}));
+  st.manmonths = [];
+  [["2026-08", [.25, .25, .2, .2, .2, .15, .1, .1]], ["2026-09", [.6, .6, .5, .5, .5, .45, .2, .2]]].forEach(([m, v]) => st.pmPlan.forEach((p, i) => st.manmonths.push({id: m + p.name, name: p.name, month: m, mm: v[i]})));
   return st;
 }
 function demoCall(action, p) {
@@ -504,6 +524,8 @@ function demoCall(action, p) {
     }
     case "deleteEvidence": st.evidence = (st.evidence || []).filter(e => e.id !== p.id); break;
     case "packEvidence": throw new Error("示範模式無法打包到 Google Drive（正式版才可使用）");
+    case "saveBudget": { const b = find(st.budget, p.budget.id); b.spent = Math.max(0, Math.round(+p.budget.spent || 0)); b.note = p.budget.note; b.updatedBy = S.me || "主管"; b.updatedAt = now; break; }
+    case "saveManMonths": Object.keys(p.values).forEach(n => { const ex = st.manmonths.find(x => x.name === n && x.month === p.month); if (ex) ex.mm = p.values[n]; else if (p.values[n] > 0) st.manmonths.push({id: id(), name: n, month: p.month, mm: p.values[n]}); }); break;
     case "saveCheckpoint": { const c = find(st.checkpoints, p.id); c.current = Math.max(0, +p.current || 0); c.note = p.note; c.updatedBy = by; c.updatedAt = now; break; }
   }
   demoSave(st);
@@ -562,6 +584,7 @@ function issues() { return S.D.tasks.filter(t => t.issue || t.blocked); }
 function navItems() {
   const mine = S.D.helps.filter(h => h.helper === S.me && h.status === "待回應").length;
   const items = [["home", "查核點進度", "home"], ["team", "團隊日誌", "work"]];
+  if (S.role === "admin") items.push(["fin", "經費人月", "money"]);
   if (S.D.tasks.some(t => t.owner === S.me)) items.unshift(["my", "我的日誌", "my", mine]);
   return items;
 }
@@ -587,7 +610,7 @@ function render() {
   if (!S.D) return;
   const y = window.scrollY;
   shell();
-  const V = {my: vMy, home: vHome, team: vTeam, modules: vModules}[S.view] || vHome;
+  const V = {my: vMy, home: vHome, team: vTeam, modules: vModules, fin: vFinance}[S.view] || vHome;
   document.getElementById("main").innerHTML = (DEMO ? `<div class="demo"><b>示範模式</b>資料只存在這台電腦的瀏覽器，可以放心試按。<button data-act="demo-reset">還原範例資料</button></div>` : "") + V();
   window.scrollTo(0, y);
 }
@@ -735,6 +758,86 @@ function secCard(s) {
         <div class="pbar ${barCls(t)}"><i style="width:${t.progress}%"></i><b style="left:${t.exp}%"></b></div></div>
     </div>`).join("")}
   </div>`;
+}
+
+/* ---------- 經費與人月（主管） ---------- */
+function money(n) { return Math.round(n).toLocaleString("zh-TW"); }
+function elapsedFrac() { return Math.max(0, Math.min(1, (dn(TODAY) - dn(PERIOD.start) + 1) / (dn(PERIOD.end) - dn(PERIOD.start) + 1))); }
+function mmUsed(name) { return S.D.manmonths.filter(m => m.name === name).reduce((a, m) => a + (+m.mm || 0), 0); }
+/* 人月狀態：契約規定實際投入人月以人力需求表 ±5% 為限 */
+function mmStatus(used, plan) {
+  const r = plan ? used / plan : 0, exp = plan * elapsedFrac();
+  if (r > 1.05) return chip("超出 105% 上限", "s-bad");
+  if (r >= 0.95 && r <= 1.05 && TODAY >= PERIOD.end) return chip("符合 ±5%", "s-ok");
+  if (r >= 1) return chip("已達計畫人月", "s-warn");
+  if (TODAY >= PERIOD.end) return chip("未達 95%", "s-bad");
+  if (elapsedFrac() > 0.15 && used < exp * 0.85) return chip("投入落後時程", "s-warn");
+  return chip("正常", "s-ok");
+}
+function vFinance() {
+  const D = S.D, full = S.role === "admin" && !S.limited;
+  if (!D.budget) return `<h1>經費與人月</h1><div class="card empty" style="margin-top:14px">請先更新 Google Apps Script 程式並執行 setup，這一頁才會有資料。</div>`;
+  const ef = elapsedFrac(), plan = D.pmPlan.reduce((a, p) => a + p.plan, 0), used = D.pmPlan.reduce((a, p) => a + mmUsed(p.name), 0);
+  const B = D.budget.reduce((a, b) => a + b.budget, 0), SP = D.budget.reduce((a, b) => a + b.spent, 0);
+  const groups = [];
+  D.budget.forEach(b => { if (!groups.includes(b.group)) groups.push(b.group); });
+  const band = (p, cls) => `<div class="pbar fin ${cls || ""}"><i style="width:${Math.min(100, p)}%"></i><b style="left:${ef * 100}%"></b></div>`;
+  return `
+  <div class="row between wrap" style="margin-bottom:16px;gap:12px">
+    <div><div class="eyebrow">僅主管可見 · 契約期程 ${md(PERIOD.start)}–${md(PERIOD.end)}</div><h1>經費與人月</h1>
+      <div class="muted small">已過期程 ${pct(ef * 100)}（黑線＝依時程應達）· 資料依出勤／薪資及會計紀錄每月登錄</div></div>
+    <div class="sumbox">
+      <div><span class="muted small">人月投入</span><b>${used.toFixed(1)}<small>／${plan.toFixed(1)}</small></b><span class="small muted">${pct(plan ? used / plan * 100 : 0)}</span></div>
+      <div><span class="muted small">經費執行</span><b>${pct(B ? SP / B * 100 : 0)}</b><span class="small muted">${money(SP)} 元</span></div>
+    </div>
+  </div>
+
+  <div class="card sec">
+    <div class="sec-h"><div style="flex:1"><h3 style="margin:0">人月投入</h3><div class="muted small" style="margin-top:4px">契約：實際投入人月須在人力需求表 <b>95%～105%</b> 之間（${(plan * .95).toFixed(2)}～${(plan * 1.05).toFixed(2)} 人月）；超出 105% 部分不予給付，不足 95% 部分不予給付或須繳回</div></div>
+      ${full ? `<button class="btn sm" data-act="mm-edit">登錄人月</button>` : ""}</div>
+    ${band(plan ? used / plan * 100 : 0, used > plan * 1.05 ? "bad" : "")}
+    <div class="fin-t">
+      <div class="fin-r fin-h"><span>人員</span><span>各月投入</span><span class="num-c">已投入／計畫</span><span>狀態</span></div>
+      ${D.pmPlan.map(p => { const u = mmUsed(p.name); return `<div class="fin-r">
+        <span class="row" style="gap:8px">${av(p.name)}<span><b>${esc(p.name)}</b><br><span class="muted small">${esc(p.title)}</span></span></span>
+        <span class="mchips">${PERIOD.months.map(m => { const v = D.manmonths.filter(x => x.name === p.name && x.month === m).reduce((a, x) => a + x.mm, 0); return `<span class="mchip ${v ? "on" : ""}" title="${+m.slice(5)} 月">${+m.slice(5)}月 ${v ? v : "–"}</span>`; }).join("")}</span>
+        <span class="num-c"><b>${u.toFixed(2)}</b>／${p.plan}<div class="pbar ${u > p.plan * 1.05 ? "bad" : ""}" style="margin-top:4px"><i style="width:${Math.min(100, p.plan ? u / p.plan * 100 : 0)}%"></i><b style="left:${ef * 100}%"></b></div></span>
+        <span>${mmStatus(u, p.plan)}</span></div>`; }).join("")}
+    </div>
+    <div class="muted small" style="margin-top:10px">另依契約第十一條：每人當年度所有政府計畫（含本計畫）總人月不得超過 12 人月，請另行對照其他計畫。</div>
+  </div>
+
+  <div class="card sec">
+    <div class="sec-h"><div style="flex:1"><h3 style="margin:0">經費執行</h3><div class="muted small" style="margin-top:4px">契約：各款費用（直接薪資、管理費用、其他直接費用）<b>不得相互流用</b>，超出報支上限部分不予給付</div></div>
+      <div class="sec-p"><b>${money(SP)}</b><span class="muted small">／${money(B)} 元</span></div></div>
+    ${band(B ? SP / B * 100 : 0)}
+    ${groups.map(g => { const items = D.budget.filter(b => b.group === g), gb = items.reduce((a, b) => a + b.budget, 0), gs = items.reduce((a, b) => a + b.spent, 0), over = gs > gb;
+      return `<div class="fin-g"><div class="row between"><b>${esc(g)}</b><span class="small">${over ? chip("超出預算：不得流用", "s-bad") + " " : ""}<b>${money(gs)}</b> <span class="muted">／${money(gb)}（${pct(gb ? gs / gb * 100 : 0)}）</span></span></div>
+        ${items.length > 1 || items[0].item !== g ? items.map(b => `<div class="fin-i ${full ? "clickable" : ""}" ${full ? `data-act="bud-edit" data-id="${esc(b.id)}"` : ""}>
+          <span class="ellip">${esc(b.item)}${b.note ? ` <span class="muted small">· ${esc(b.note)}</span>` : ""}</span>
+          <span class="num-c small">${money(b.spent)}／${money(b.budget)}</span>
+          <div class="pbar ${b.spent > b.budget ? "bad" : ""}"><i style="width:${Math.min(100, b.budget ? b.spent / b.budget * 100 : 0)}%"></i><b style="left:${ef * 100}%"></b></div></div>`).join("")
+        : `<div class="fin-i ${full ? "clickable" : ""}" ${full ? `data-act="bud-edit" data-id="${esc(items[0].id)}"` : ""}><span class="muted small ellip">${items[0].note ? esc(items[0].note) : (full ? "點此更新已執行數" : "")}</span><span></span><div class="pbar ${over ? "bad" : ""}"><i style="width:${Math.min(100, gb ? gs / gb * 100 : 0)}%"></i><b style="left:${ef * 100}%"></b></div></div>`}
+      </div>`; }).join("")}
+    <div class="muted small" style="margin-top:10px">${D.budget.filter(b => b.updatedAt).length ? "最近更新：" + D.budget.filter(b => b.updatedAt).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 2).map(b => `${esc(b.item)}（${esc(b.updatedBy)}，${ago(b.updatedAt)}）`).join("、") : "尚未登錄已執行數"}</div>
+  </div>`;
+}
+function mBudget(id) {
+  const b = S.D.budget.find(x => x.id === id);
+  modal(`更新經費：${esc(b.item)}`, `<input type="hidden" name="id" value="${esc(b.id)}">
+    <p style="margin-top:0" class="muted small">款：${esc(b.group)} · 預算數 ${money(b.budget)} 元</p>
+    <div class="f"><label>已執行數（元，依會計系統累計）</label><input type="number" name="spent" min="0" step="1" value="${b.spent}"></div>
+    <div class="f"><label>備註 <span class="muted">（選填）</span></label><input type="text" name="note" value="${esc(b.note)}" placeholder="例：截至 10/31 已核銷"></div>`,
+    `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">儲存</button>`, "budget");
+}
+function mManMonths(month) {
+  const m = month || (PERIOD.months.includes(TODAY.slice(0, 7)) ? TODAY.slice(0, 7) : PERIOD.months[PERIOD.months.length - 1]);
+  const cur = n => S.D.manmonths.filter(x => x.name === n && x.month === m).reduce((a, x) => a + x.mm, 0);
+  modal("登錄人月", `<div class="f"><label>月份</label><select name="month" data-act-change="mm-month">${PERIOD.months.map(x => `<option value="${x}" ${x === m ? "selected" : ""}>${+x.slice(0, 4) - 1911} 年 ${+x.slice(5)} 月</option>`).join("")}</select></div>
+    <div class="muted small" style="margin-bottom:10px">填寫該月實際投入本計畫的人月（依出勤／薪資紀錄，0～1，例：兼任 0.6、專任 1）。</div>
+    ${S.D.pmPlan.map(p => `<div class="row" style="margin-bottom:8px">${av(p.name)}<span style="flex:1">${esc(p.name)} <span class="muted small">全期 ${p.plan} 人月 · 已投入 ${mmUsed(p.name).toFixed(2)}</span></span>
+      <input type="number" class="inp" name="mm_${esc(p.name)}" min="0" max="1" step="0.05" value="${cur(p.name) || ""}" placeholder="0" style="width:90px"></div>`).join("")}`,
+    `<button type="button" class="btn ghost" data-act="close">取消</button><button class="btn">儲存</button>`, "mm");
 }
 
 /* ---------- 團隊日誌 ---------- */
@@ -1057,6 +1160,8 @@ document.addEventListener("click", e => {
     case "logtoggle": { const row = document.querySelector(`.logrow[data-task="${id}"]`); row.classList.toggle("on"); if (row.classList.contains("on")) row.querySelector("textarea").focus(); dailyHint(); break; }
     case "pgadd": { const r = document.querySelector(`[name="progress_${id}"]`); r.value = +v === 100 ? 100 : Math.min(100, +r.value + +v); logPg(r); break; }
     case "trange": S.teamRange = v; render(); break;
+    case "bud-edit": mBudget(id); break;
+    case "mm-edit": mManMonths(); break;
     case "ev-list": mEvidence(v || ""); break;
     case "ev-csv": evCsv(v || ""); toast("已下載佐證清單"); break;
     case "ev-copy": navigator.clipboard.writeText(evText(v || "")).then(() => toast("已複製清單")).catch(() => toast("無法複製，請改用下載 Excel", true)); break;
@@ -1105,6 +1210,7 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   if (e.target.dataset.fil === "who") { S.f.who = e.target.value; render(); }
   if (e.target.dataset.actChange === "rep-task") mReport(e.target.value);
+  if (e.target.dataset.actChange === "mm-month") mManMonths(e.target.value);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 document.addEventListener("submit", e => {
@@ -1129,6 +1235,12 @@ document.addEventListener("submit", e => {
     if (!fd.done.trim()) return toast("請寫下今天的工作內容", true);
     if (helpers.length && !fd.issue.trim()) return toast("請說明需要協助的問題", true);
     act("report", {report: Object.assign(fd, {helpers, progress, next: "", status: progress >= 100 ? "已完成" : fd.issue.trim() ? "遇到困難" : "進行中"})}, helpers.length ? `已記錄，並通知 ${helpers.join("、")} 協助` : "日誌已記錄，辛苦了！");
+  } else if (kind === "budget") {
+    act("saveBudget", {budget: {id: fd.id, spent: +fd.spent, note: fd.note}}, "經費已更新");
+  } else if (kind === "mm") {
+    const values = {};
+    Object.keys(fd).filter(k => k.startsWith("mm_")).forEach(k => { const v = fd[k] === "" ? 0 : +fd[k]; if (!(v >= 0 && v <= 1)) return; values[k.slice(3)] = v; });
+    act("saveManMonths", {month: fd.month, values}, `${+fd.month.slice(5)} 月人月已登錄`);
   } else if (kind === "resolve") {
     const note = (fd.note || "").trim();
     if (fd.kind === "help") act("helpUpdate", {id: fd.id, status: "已解決", response: note || undefined}, "已標記為已解決");
