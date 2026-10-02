@@ -137,6 +137,10 @@ function setup() {
   if (!String(c.getRange('A4').getDisplayValue()).trim()) {
     c.getRange('A4:C4').setValues([['主管通知 Email', Session.getEffectiveUser().getEmail(), '← 卡關通知與每週摘要寄到這裡，多個以逗號分隔']]);
   }
+  if (!String(c.getRange('A5').getDisplayValue()).trim()) {
+    const owner = (read_('tasks').filter(t => /經費/.test(t.name))[0] || {}).owner || '';
+    c.getRange('A5:C5').setValues([['經費負責人', owner, '← 可看與更新「經費人月」頁（主管以外），多人以、分隔']]);
+  }
   // 全期計畫人月：空白者依人力需求表補上
   const ps = ss.getSheetByName(SHEETS.people.name), pcol = SHEETS.people.cols.indexOf('pmTotal') + 1;
   if (ps.getLastRow() >= 2) ps.getRange(2, 1, ps.getLastRow() - 1, pcol).getDisplayValues().forEach((r, i) => {
@@ -203,10 +207,12 @@ function handle_(p) {
     const deny = () => out_({ok: false, error: '只有主管可以執行這個動作'});
     const full = admin && !who.limited; // 點名字登入的主管：可看全部、回覆，但不能刪除或修改工作項目
     const denyFull = () => out_({ok: false, error: '刪除與修改工作項目請用「主管登入」或主管專屬連結'});
+    const finOwner = !admin && financeOwners_().indexOf(who.name) >= 0;
+    const finView = admin || finOwner, finEdit = full || finOwner; // 經費人月：僅主管與經費負責人
     switch (p.action) {
-      case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name, limited: !!who.limited}, readAll_(), admin ? readFinance_() : {}));
-      case 'saveBudget': return full ? locked_(() => saveBudget_(p.budget || {}, who)) : admin ? denyFull() : deny();
-      case 'saveManMonths': return full ? locked_(() => saveManMonths_(p.month, p.values || {}, who)) : admin ? denyFull() : deny();
+      case 'data': return out_(Object.assign({ok: true, role: who.role, me: who.name, limited: !!who.limited, finance: finView, finEdit: finEdit}, readAll_(), finView ? readFinance_() : {}));
+      case 'saveBudget': return finEdit ? locked_(() => saveBudget_(p.budget || {}, who)) : out_({ok: false, error: '只有主管與經費負責人可以更新經費'});
+      case 'saveManMonths': return finEdit ? locked_(() => saveManMonths_(p.month, p.values || {}, who)) : out_({ok: false, error: '只有主管與經費負責人可以登錄人月'});
       case 'report': return locked_(() => addReport_(p.report || {}, who));
       case 'reply': return admin ? locked_(() => replyReport_(p.id, p.reply)) : deny();
       case 'deleteReport': return full ? locked_(() => deleteRow_('reports', p.id)) : admin ? denyFull() : deny();
@@ -442,7 +448,14 @@ function dn_(s) { return Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8
 function md_(s) { return +s.slice(5, 7) + '/' + +s.slice(8, 10); }
 
 /* ---------- helpers ---------- */
-/* ---------- 經費與人月（僅主管） ---------- */
+/* ---------- 經費與人月（僅主管與經費負責人） ---------- */
+/** 「設定」B5 經費負責人（可多人，以、或逗號分隔）；空白時預設為名稱含「經費」之工作項目的主責人 */
+function financeOwners_() {
+  const c = SpreadsheetApp.getActive().getSheetByName('設定');
+  const v = c ? String(c.getRange('B5').getDisplayValue()).trim() : '';
+  if (v) return v.split(/[、,，;；\s]+/).filter(Boolean);
+  return read_('tasks').filter(t => /經費/.test(t.name)).map(t => t.owner).filter(Boolean);
+}
 function readFinance_() {
   return {
     budget: read_('budget').map(b => Object.assign(b, {budget: Number(b.budget) || 0, spent: Number(b.spent) || 0})),

@@ -431,6 +431,7 @@ async function call(action, extra) {
 async function load() {
   const j = await call("data");
   S.role = j.role; S.me = j.me || ""; S.limited = !!j.limited;
+  S.fin = j.finance != null ? !!j.finance : j.role === "admin"; S.finEdit = j.finEdit != null ? !!j.finEdit : (j.role === "admin" && !j.limited); // 經費人月權限
   S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people, evidence: j.evidence || [], budget: j.budget || null, manmonths: j.manmonths || [], pmPlan: j.pmPlan || []};
   derive();
 }
@@ -485,7 +486,7 @@ function demoCall(action, p) {
   const id = () => Math.random().toString(36).slice(2, 10);
   const find = (arr, i) => arr.find(x => String(x.id) === String(i));
   switch (action) {
-    case "data": return Object.assign({ok: true, role: S.role, me: S.me}, JSON.parse(JSON.stringify(st)));
+    case "data": { const fin = S.role === "admin" || S.me === "莊嘉雲", d = JSON.parse(JSON.stringify(st)); if (!fin) { delete d.budget; delete d.manmonths; delete d.pmPlan; } return Object.assign({ok: true, role: S.role, me: S.me, finance: fin, finEdit: fin}, d); }
     case "report": {
       const r = p.report, t = find(st.tasks, r.taskId);
       if (!t) throw new Error("找不到這個工作項目");
@@ -584,7 +585,7 @@ function issues() { return S.D.tasks.filter(t => t.issue || t.blocked); }
 function navItems() {
   const mine = S.D.helps.filter(h => h.helper === S.me && h.status === "待回應").length;
   const items = [["home", "查核點進度", "home"], ["team", "團隊日誌", "work"]];
-  if (S.role === "admin") items.push(["fin", "經費人月", "money"]);
+  if (S.fin) items.push(["fin", "經費人月", "money"]);
   if (S.D.tasks.some(t => t.owner === S.me)) items.unshift(["my", "我的日誌", "my", mine]);
   return items;
 }
@@ -775,7 +776,8 @@ function mmStatus(used, plan) {
   return chip("正常", "s-ok");
 }
 function vFinance() {
-  const D = S.D, full = S.role === "admin" && !S.limited;
+  const D = S.D, full = S.finEdit;
+  if (!S.fin) return `<h1>經費與人月</h1><div class="card empty" style="margin-top:14px">🔒 此頁僅限主管與經費負責人查看</div>`;
   if (!D.budget) return `<h1>經費與人月</h1><div class="card empty" style="margin-top:14px">請先更新 Google Apps Script 程式並執行 setup，這一頁才會有資料。</div>`;
   const ef = elapsedFrac(), plan = D.pmPlan.reduce((a, p) => a + p.plan, 0), used = D.pmPlan.reduce((a, p) => a + mmUsed(p.name), 0);
   const B = D.budget.reduce((a, b) => a + b.budget, 0), SP = D.budget.reduce((a, b) => a + b.spent, 0);
@@ -784,7 +786,7 @@ function vFinance() {
   const band = (p, cls) => `<div class="pbar fin ${cls || ""}"><i style="width:${Math.min(100, p)}%"></i><b style="left:${ef * 100}%"></b></div>`;
   return `
   <div class="row between wrap" style="margin-bottom:16px;gap:12px">
-    <div><div class="eyebrow">僅主管可見 · 契約期程 ${md(PERIOD.start)}–${md(PERIOD.end)}</div><h1>經費與人月</h1>
+    <div><div class="eyebrow">僅主管與經費負責人可見 · 契約期程 ${md(PERIOD.start)}–${md(PERIOD.end)}</div><h1>經費與人月</h1>
       <div class="muted small">已過期程 ${pct(ef * 100)}（黑線＝依時程應達）· 資料依出勤／薪資及會計紀錄每月登錄</div></div>
     <div class="sumbox">
       <div><span class="muted small">人月投入</span><b>${used.toFixed(1)}<small>／${plan.toFixed(1)}</small></b><span class="small muted">${pct(plan ? used / plan * 100 : 0)}</span></div>
