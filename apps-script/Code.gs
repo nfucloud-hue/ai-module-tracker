@@ -17,6 +17,8 @@ const SHEETS = {
     head: ['ID', '建立時間', '工作項目ID', '請求人', '協助人', '需要協助的內容', '狀態', '協助回覆', '更新時間']},
   modules: {name: '模組看板', cols: ['id', 'name', 'owner', 'sec', 'secHigh', 'cloud', 'note', 'updatedBy', 'updatedAt'],
     head: ['代號', '模組名稱', '負責人', '資安檢測(1-1)', '未修補高風險數', '雲端上架(1-2)', '備註', '更新人', '更新時間']},
+  evidence: {name: '佐證檔案', cols: ['id', 'taskId', 'title', 'url', 'addedBy', 'addedAt'],
+    head: ['ID', '工作項目ID', '檔案名稱', '連結', '上傳人', '上傳時間']},
   checkpoints: {name: '查核點', cols: ['id', 'due', 'title', 'target', 'current', 'auto', 'note', 'updatedBy', 'updatedAt'],
     head: ['查核點', '完成期限', '查核點概述', '目標值', '目前達成值', '自動計算來源', '備註', '更新人', '更新時間']},
   people: {name: '人員', cols: ['name', 'title', 'pm', 'focus', 'pin', 'link', 'email', 'role'],
@@ -191,6 +193,9 @@ function handle_(p) {
       case 'help': return locked_(() => addHelp_(p.help || {}, who));
       case 'helpUpdate': return locked_(() => updateHelp_(p, who));
       case 'saveModule': return locked_(() => saveModule_(p.module || {}, who));
+      case 'addEvidence': return locked_(() => addEvidence_(p.evidence || {}, who));
+      case 'deleteEvidence': return locked_(() => deleteEvidence_(p.id, who, full));
+      case 'packEvidence': return full ? packEvidence_(p.checkpoint) : admin ? denyFull() : deny();
       case 'saveCheckpoint': return locked_(() => patch_('checkpoints', p.id, {current: String(Math.max(0, Number(p.current) || 0)), note: clean_(p.note, 300), updatedBy: who.name || '主管', updatedAt: now_()}));
       default: return out_({ok: false, error: 'unknown_action'});
     }
@@ -220,6 +225,7 @@ function readAll_() {
     modules: read_('modules').map(m => Object.assign(m, {secHigh: Number(m.secHigh) || 0})),
     checkpoints: read_('checkpoints').map(c => Object.assign(c, {target: Number(c.target) || 0, current: Number(c.current) || 0})),
     people: people,
+    evidence: read_('evidence'),
   };
 }
 
@@ -414,6 +420,59 @@ function dn_(s) { return Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8
 function md_(s) { return +s.slice(5, 7) + '/' + +s.slice(8, 10); }
 
 /* ---------- helpers ---------- */
+/* ---------- 佐證檔案 ---------- */
+function addEvidence_(e, who) {
+  const task = read_('tasks').filter(t => t.id === String(e.taskId))[0];
+  if (!task) return out_({ok: false, error: '找不到這個工作項目'});
+  if (who.role !== 'admin' && task.owner !== who.name) return out_({ok: false, error: '只有主責人可以上傳佐證'});
+  const url = String(e.url || '').trim();
+  if (!/^https?:\/\/\S+$/i.test(url) || url.length > 1000) return out_({ok: false, error: '請貼上 http 或 https 開頭的完整連結'});
+  if (!String(e.title || '').trim()) return out_({ok: false, error: '請填寫檔案名稱'});
+  append_('evidence', {id: Utilities.getUuid(), taskId: task.id, title: clean_(e.title, 120), url: url,
+    addedBy: who.name || '主管', addedAt: now_()});
+  return out_({ok: true});
+}
+function deleteEvidence_(id, who, full) {
+  const e = read_('evidence').filter(x => x.id === String(id))[0];
+  if (!e) return out_({ok: false, error: '找不到這筆佐證'});
+  if (!full && e.addedBy !== who.name) return out_({ok: false, error: '只能刪除自己上傳的佐證'});
+  return deleteRow_('evidence', e.id);
+}
+/**
+ * 一鍵打包：在你的 Google Drive 建立「查核點X_佐證_日期」資料夾，
+ * Google Drive 檔案複製進去、Drive 資料夾建立捷徑，並附一份「佐證清單」試算表（含所有連結與處理結果）。
+ * checkpoint 為工作項目的「對應查核點」（1-1、1-2、1-3）；空白代表計畫管理；'all' 代表全部。
+ */
+function packEvidence_(checkpoint) {
+  const cp = String(checkpoint == null ? 'all' : checkpoint);
+  const tasks = read_('tasks').filter(t => cp === 'all' || (t.checkpoint || '') === cp);
+  const ids = tasks.map(t => t.id), ev = read_('evidence').filter(e => ids.indexOf(e.taskId) >= 0);
+  if (!ev.length) return out_({ok: false, error: '這個查核點還沒有任何佐證連結'});
+  const label = cp === 'all' ? '全部查核點' : cp ? '查核點' + cp : '計畫管理';
+  const folder = DriveApp.createFolder(label + '_佐證_' + Utilities.formatDate(new Date(), TZ, 'yyyyMMdd-HHmm'));
+  const rows = [['工作編號', '工作項目', '主責', '應交付文件', '檔案名稱', '原始連結', '打包結果', '上傳人', '上傳時間']];
+  tasks.forEach(t => {
+    const list = ev.filter(e => e.taskId === t.id);
+    if (!list.length) rows.push([t.code, t.name, t.owner, t.deliverable, '', '', '⚠ 尚未提供佐證', '', '']);
+    list.forEach(e => {
+      let result = '外部連結（請手動下載）';
+      const m = /\/d\/([\w-]{20,})|[?&]id=([\w-]{20,})|\/folders\/([\w-]{20,})/.exec(e.url);
+      try {
+        if (m && m[3]) { folder.createShortcut(m[3]); result = '已建立資料夾捷徑'; }
+        else if (m) { DriveApp.getFileById(m[1] || m[2]).makeCopy(t.code + '_' + e.title, folder); result = '已複製'; }
+      } catch (x) { result = '無法存取（請確認檔案已共用給你）'; }
+      rows.push([t.code, t.name, t.owner, t.deliverable, e.title, e.url, result, e.addedBy, Utilities.formatDate(new Date(e.addedAt), TZ, 'yyyy/MM/dd HH:mm')]);
+    });
+  });
+  const idx = SpreadsheetApp.create(label + '_佐證清單');
+  const sh = idx.getSheets()[0];
+  sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  sh.getRange(1, 1, 1, rows[0].length).setFontWeight('bold').setBackground('#eef2ff');
+  sh.setFrozenRows(1); sh.autoResizeColumns(1, rows[0].length);
+  DriveApp.getFileById(idx.getId()).moveTo(folder);
+  return out_({ok: true, url: folder.getUrl(), files: ev.length});
+}
+
 function involved_(task, name) {
   return task.owner === name || String(task.helpers || '').split(/[、,，\/／\s]+/).indexOf(name) >= 0;
 }

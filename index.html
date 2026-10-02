@@ -208,6 +208,16 @@ main{max-width:1180px;margin:auto;padding:20px 20px 60px}
 .more{margin-top:14px}
 .more .mini{display:flex;gap:10px;align-items:center;padding:9px 8px;border-bottom:1px solid var(--line2);font-size:14px;border-radius:8px}
 .num{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:700;flex:none}
+.evbox{background:#fafbfd;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:18px}
+.ev-item{display:flex;gap:10px;align-items:center;padding:5px 0;font-size:14px;border-bottom:1px dashed var(--line2)}
+.ev-item a{color:var(--brand);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px;margin-top:10px}
+.ev-add .inp{padding:7px 10px;font-size:14px}
+.ev-task{padding:10px 0;border-top:1px solid var(--line2)}
+.ev-chip{background:#f1f5ef;color:var(--ok)}
+.evn{font-size:12px;color:var(--ok);font-weight:500;white-space:nowrap}
+.evn.miss{color:var(--warn)}
+@media (max-width:760px){.ev-add{grid-template-columns:1fr}}
 .delta{color:var(--ok);font-weight:700;font-size:13px}
 .delta.neg{color:var(--bad)}.delta.zero{color:var(--muted);font-weight:400}
 .day{margin-bottom:18px}
@@ -408,7 +418,7 @@ async function call(action, extra) {
 async function load() {
   const j = await call("data");
   S.role = j.role; S.me = j.me || ""; S.limited = !!j.limited;
-  S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people};
+  S.D = {tasks: j.tasks, reports: j.reports, helps: j.helps, modules: j.modules, checkpoints: j.checkpoints, people: j.people, evidence: j.evidence || []};
   derive();
 }
 /* 送出中鎖住按鈕，避免連按造成重複資料 */
@@ -485,6 +495,15 @@ function demoCall(action, p) {
     }
     case "helpUpdate": { const h = find(st.helps, p.id); if (p.status) h.status = p.status; if (p.response != null) h.response = p.response; h.updatedAt = now; break; }
     case "saveModule": { const m = find(st.modules, p.module.id); Object.assign(m, p.module, {updatedBy: by, updatedAt: now}); break; }
+    case "addEvidence": {
+      const e = p.evidence, t = find(st.tasks, e.taskId);
+      if (!/^https?:\/\/\S+$/i.test(String(e.url || "").trim())) throw new Error("請貼上 http 或 https 開頭的完整連結");
+      if (!String(e.title || "").trim()) throw new Error("請填寫檔案名稱");
+      (st.evidence = st.evidence || []).push({id: id(), taskId: t.id, title: e.title.trim(), url: e.url.trim(), addedBy: S.me || "主管", addedAt: now});
+      break;
+    }
+    case "deleteEvidence": st.evidence = (st.evidence || []).filter(e => e.id !== p.id); break;
+    case "packEvidence": throw new Error("示範模式無法打包到 Google Drive（正式版才可使用）");
     case "saveCheckpoint": { const c = find(st.checkpoints, p.id); c.current = Math.max(0, +p.current || 0); c.note = p.note; c.updatedBy = by; c.updatedAt = now; break; }
   }
   demoSave(st);
@@ -528,6 +547,7 @@ function derive() {
     else c.current = +c.current || 0;
   });
   D.taskById = Object.fromEntries(D.tasks.map(t => [t.id, t]));
+  D.tasks.forEach(t => { t.ev = D.evidence.filter(e => e.taskId === t.id); }); // 佐證檔案
   D.staff = D.people.filter(p => !p.manager); // 執行人員（不含主管），用於人員頁、協作關係與選人清單
 }
 function stat(ts, name) {
@@ -610,6 +630,7 @@ function vMy() {
   const active = mine.filter(t => t.status !== "已完成" && t.start <= addDays(TODAY, 7)).sort((a, b) => a.end.localeCompare(b.end));
   const later = mine.filter(t => t.status !== "已完成" && t.start > addDays(TODAY, 7));
   const done = mine.filter(t => t.status === "已完成");
+  const noEv = done.filter(t => !t.ev.length);
   const toMe = D.helps.filter(h => h.helper === me && h.status !== "已解決");
   const myLogs = D.reports.filter(r => r.reporter === me);
   const today = myLogs.filter(r => ymd(new Date(r.createdAt)) === TODAY);
@@ -620,13 +641,14 @@ function vMy() {
     <div><div class="eyebrow">工作日誌 · ${md(TODAY)}（${wd(TODAY)}）</div><h1>${esc(me)}，今天做了什麼？</h1>
       <div class="muted">${today.length ? `<span style="color:var(--ok);font-weight:500">✓ 今天已記錄 ${today.length} 項</span>，有新進度可以再補充` : "勾選今天有進行的工作，寫下內容並拉到目前完成度就好"}</div></div>
   </section>
+  ${noEv.length ? `<div class="notice">📎 已完成的工作還沒附佐證：${noEv.map(t => `<button class="link" data-act="task" data-id="${t.id}">${esc(t.code)}</button>`).join("、")}　點進工作即可貼上檔案連結</div>` : ""}
   ${toMe.length ? `<div class="grid g2" style="margin-bottom:18px">${toMe.map(helpCard).join("")}</div>` : ""}
   <form data-form="daily" class="card daily">
     ${active.length ? active.map(t => logRow(t, secName(t.checkpoint), today.filter(r => r.taskId === t.id))).join("") : `<div class="empty">目前沒有進行中的主責工作</div>`}
     ${active.length ? `<div class="row between wrap" style="margin-top:6px"><span class="muted small" id="dailyHint">尚未勾選工作</span><button class="btn" id="dailyBtn" disabled>送出今日日誌</button></div>` : ""}
   </form>
   ${later.length ? `<details class="more"><summary>之後的主責工作（${later.length}）</summary>${later.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span><span class="muted small nowrap">${md(t.start)} 開始</span></div>`).join("")}</details>` : ""}
-  ${done.length ? `<details class="more"><summary>已完成（${done.length}）</summary>${done.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span>${chip("已完成")}</div>`).join("")}</details>` : ""}
+  ${done.length ? `<details class="more"><summary>已完成（${done.length}）</summary>${done.map(t => `<div class="mini clickable" data-act="task" data-id="${t.id}"><span class="code">${esc(t.code)}</span><span class="ellip" style="flex:1">${esc(t.name)}</span>${t.ev.length ? `<span class="evn">📎${t.ev.length}</span>` : '<span class="evn miss">缺佐證</span>'}${chip("已完成")}</div>`).join("")}</details>` : ""}
   <h2>我的日誌紀錄</h2>
   ${byDay.length ? byDay.map(g => `<div class="day"><div class="day-h">${dayLabel(g.d)}<span class="muted" style="font-weight:400"> · ${g.rs.length} 筆</span></div>
     ${g.rs.map((r, i) => entry(r, false, i + 1)).join("")}</div>`).join("") : `<div class="card empty">還沒有日誌，從上面勾選第一項工作開始吧</div>`}`;
@@ -696,7 +718,7 @@ function secCard(s) {
     const link = c.auto ? `data-act="nav" data-v="modules"` : `data-act="cp" data-id="${esc(c.id)}"`;
     const label = c.auto === "sec" ? "模組完成檢測" : c.auto === "cloud" ? "模組完成上架" : /累計/.test(c.title) ? "家累計擴散" : /工具機廠/.test(c.title) ? "家工具機廠擴散" : c.title.replace(/（.*?）/g, "");
     return `<span class="kpi-chip clickable" ${link} title="${esc(c.title)}"><b>${c.current}</b>／${c.target} ${esc(label)}${c.auto ? "" : " ✎"}</span>`;
-  }).join("");
+  }).join("") + `<span class="kpi-chip ev-chip clickable" data-act="ev-list" data-v="${esc(s.key)}">📎 佐證 <b>${s.tasks.filter(t => t.ev.length).length}</b>／${s.tasks.length}</span>`;
   return `<div class="card sec">
     <div class="sec-h">
       <div style="flex:1;min-width:0"><div class="row wrap" style="gap:8px"><h3 style="margin:0">${s.key ? `<span class="cp-id">${esc(s.key)}</span>` : ""}${esc(s.name)}</h3>${dueChip}</div>
@@ -706,7 +728,7 @@ function secCard(s) {
     <div class="pbar ${s.actual + 10 < s.exp ? "warn" : s.actual >= 100 ? "ok" : ""}" style="margin:2px 0 8px"><i style="width:${s.actual}%"></i><b style="left:${s.exp}%"></b></div>
     ${s.tasks.map(t => `<div class="trow clickable" data-act="task" data-id="${t.id}">
       <span class="code">${esc(t.code)}</span>
-      <div style="min-width:0"><div class="ellip tname">${esc(t.name)}</div>
+      <div style="min-width:0"><div class="ellip tname">${esc(t.name)}${t.ev.length ? ` <span class="evn" title="已附 ${t.ev.length} 個佐證">📎${t.ev.length}</span>` : t.status === "已完成" ? ' <span class="evn miss">缺佐證</span>' : ""}</div>
         <div class="small muted row" style="gap:6px">${av(t.owner)}${esc(t.owner)} · ${md(t.start)}–${md(t.end)}${t.last ? " · " + ago(t.last.createdAt) : ""}</div>
         ${t.blocked && t.issue ? `<div class="small" style="color:var(--bad)">⚠ ${esc(t.issue)}</div>` : ""}</div>
       <div class="tprog"><div class="row" style="gap:8px;justify-content:flex-end"><b>${t.progress}%</b>${t.status === "已完成" || t.attention ? taskChip(t) : ""}</div>
@@ -833,6 +855,7 @@ function mTask(id) {
       <dt>權重</dt><dd>${t.weight}%</dd>
       ${t.note ? `<dt>備註</dt><dd>${esc(t.note)}</dd>` : ""}
     </dl>
+    ${evBox(t)}
     <div class="row" style="margin-bottom:6px"><b style="font-size:22px">${t.progress}%</b><span class="muted small">依時程應達 ${t.exp}%</span></div>
     <div class="pbar ${barCls(t)}" style="margin-bottom:20px"><i style="width:${t.progress}%"></i><b style="left:${t.exp}%"></b></div>
     ${hs.length ? `<h3 style="margin-bottom:8px">協助請求</h3>${hs.map(h => `<div class="row small" style="margin-bottom:6px">${av(h.requester)}→${av(h.helper)}<span style="flex:1">${esc(h.content)}</span>${chip(h.status)}</div>`).join("")}<div style="height:12px"></div>` : ""}
@@ -850,6 +873,52 @@ function mTask(id) {
     ${t.owner === S.me && t.status !== "已完成" ? `<button type="button" class="btn ghost" data-act="help-new" data-id="${t.id}">請求協助</button>` : ""}
     ${canReport(t) && t.status !== "已完成" ? `<button type="button" class="btn" data-act="report" data-id="${t.id}">${t.owner === S.me ? "寫日誌" : "代為記錄"}</button>` : ""}`;
   modal(`<span class="code" style="font-size:15px">${esc(t.code)}</span> ${esc(t.name)}`, body, foot);
+}
+
+/* 工作詳情裡的佐證檔案區：列出連結，主責人／主管可新增 */
+function canEv(t) { return (S.role === "admin" && !S.limited) || t.owner === S.me || (S.role === "admin" && S.me); }
+function evLink(e) { return `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title)}</a>`; }
+function evBox(t) {
+  return `<div class="evbox">
+    <div class="row between" style="margin-bottom:6px"><b>📎 佐證檔案</b><span class="muted small">應交付：${esc(t.deliverable || "—")}</span></div>
+    ${t.ev.length ? t.ev.map(e => `<div class="ev-item">${evLink(e)}<span class="muted small nowrap">${esc(e.addedBy)} · ${md(ymd(new Date(e.addedAt)))}</span>
+      ${(S.role === "admin" && !S.limited) || e.addedBy === S.me ? `<button type="button" class="link small" style="color:var(--muted)" data-act="ev-del" data-id="${e.id}" data-v="${t.id}">刪除</button>` : ""}</div>`).join("")
+      : `<div class="small" style="color:var(--warn);margin-bottom:6px">尚未提供佐證${t.status === "已完成" ? "（工作已完成，請補上）" : ""}</div>`}
+    ${canEv(t) ? `<div class="ev-add"><input class="inp" id="ev-title" placeholder="檔案名稱（例：資安檢測報告 v1.pdf）"><input class="inp" id="ev-url" placeholder="貼上連結（Google Drive、PDF、截圖網址）"><button type="button" class="btn sm" data-act="ev-add" data-id="${t.id}">新增</button></div>
+      <div class="muted small" style="margin-top:6px">Google Drive 檔案請設為「知道連結的使用者可檢視」或共用給計畫管理者，打包時才能複製。</div>` : ""}
+  </div>`;
+}
+
+/* 查核點佐證清單 */
+function evRows(key) {
+  const ts = S.D.tasks.filter(t => key === "all" || (t.checkpoint || "") === key), rows = [];
+  ts.forEach(t => { if (!t.ev.length) rows.push({t, e: null}); t.ev.forEach(e => rows.push({t, e})); });
+  return rows;
+}
+function mEvidence(key) {
+  const sec = sections().find(x => x.key === key), rows = evRows(key), ts = sec ? sec.tasks : [];
+  const have = ts.filter(t => t.ev.length).length;
+  const body = `<div class="muted small" style="margin-bottom:12px">${have}／${ts.length} 項工作已提供佐證 · 共 ${rows.filter(r => r.e).length} 個連結</div>
+    ${ts.map(t => `<div class="ev-task">
+      <div class="row" style="gap:8px"><span class="code">${esc(t.code)}</span><b class="ellip" style="flex:1">${esc(t.name)}</b>${av(t.owner)}</div>
+      <div class="muted small">應交付：${esc(t.deliverable || "—")}</div>
+      ${t.ev.length ? t.ev.map(e => `<div class="ev-item">📎 ${evLink(e)}<span class="muted small nowrap">${esc(e.addedBy)} · ${md(ymd(new Date(e.addedAt)))}</span></div>`).join("") : `<div class="small" style="color:var(--warn)">⚠ 尚未提供佐證</div>`}
+    </div>`).join("")}`;
+  const pack = S.role === "admin" && !S.limited ? `<button type="button" class="btn" data-act="ev-pack" data-v="${esc(key)}">📦 打包到 Google Drive</button>` : "";
+  modal(`${key ? "查核點 " + esc(key) : "計畫管理"} 佐證清單`, body,
+    `<button type="button" class="btn ghost" data-act="ev-copy" data-v="${esc(key)}" style="margin-right:auto">複製清單</button><button type="button" class="btn ghost" data-act="ev-csv" data-v="${esc(key)}">下載 Excel</button>${pack}`);
+}
+function evCsv(key) {
+  const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+  const lines = [["查核點", "工作編號", "工作項目", "主責", "應交付文件", "檔案名稱", "連結", "上傳人", "上傳日期"].map(q).join(",")]
+    .concat(evRows(key).map(({t, e}) => [t.checkpoint || "計畫管理", t.code, t.name, t.owner, t.deliverable, e ? e.title : "尚未提供", e ? e.url : "", e ? e.addedBy : "", e ? ymd(new Date(e.addedAt)) : ""].map(q).join(",")));
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], {type: "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `${key ? "查核點" + key : "計畫管理"}_佐證清單_${TODAY}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function evText(key) {
+  return evRows(key).map(({t, e}) => `${t.code} ${t.name}（${t.owner}）\n  ${e ? e.title + "：" + e.url : "⚠ 尚未提供佐證（應交付：" + (t.deliverable || "—") + "）"}`).join("\n");
 }
 
 function mReport(id) {
@@ -988,6 +1057,24 @@ document.addEventListener("click", e => {
     case "logtoggle": { const row = document.querySelector(`.logrow[data-task="${id}"]`); row.classList.toggle("on"); if (row.classList.contains("on")) row.querySelector("textarea").focus(); dailyHint(); break; }
     case "pgadd": { const r = document.querySelector(`[name="progress_${id}"]`); r.value = +v === 100 ? 100 : Math.min(100, +r.value + +v); logPg(r); break; }
     case "trange": S.teamRange = v; render(); break;
+    case "ev-list": mEvidence(v || ""); break;
+    case "ev-csv": evCsv(v || ""); toast("已下載佐證清單"); break;
+    case "ev-copy": navigator.clipboard.writeText(evText(v || "")).then(() => toast("已複製清單")).catch(() => toast("無法複製，請改用下載 Excel", true)); break;
+    case "ev-add": {
+      const title = document.getElementById("ev-title").value.trim(), url = document.getElementById("ev-url").value.trim();
+      if (!title || !url) return toast("請填寫檔案名稱與連結", true);
+      if (!/^https?:\/\/\S+$/i.test(url)) return toast("連結需以 http:// 或 https:// 開頭", true);
+      if (S.busy) return; busy(true);
+      call("addEvidence", {evidence: {taskId: id, title, url}}).then(() => load()).then(() => { busy(false); render(); mTask(id); toast("已新增佐證"); }).catch(x => { busy(false); toast(x.message, true); });
+      break;
+    }
+    case "ev-del": if (confirm("確定刪除這個佐證連結？")) call("deleteEvidence", {id}).then(() => load()).then(() => { render(); mTask(v); toast("已刪除"); }).catch(x => toast(x.message, true)); break;
+    case "ev-pack": {
+      if (S.busy) return; busy(true); el.textContent = "打包中…（約 1 分鐘）";
+      call("packEvidence", {checkpoint: v || ""}).then(j => { busy(false); closeModal(); toast(`已打包 ${j.files} 個佐證到 Google Drive`); window.open(j.url, "_blank", "noopener"); })
+        .catch(x => { busy(false); el.textContent = "📦 打包到 Google Drive"; toast(x.message, true); });
+      break;
+    }
     case "resolve": mResolve(el.dataset.kind, id); break;
   }
 });
