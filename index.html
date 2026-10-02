@@ -359,7 +359,13 @@ function ago(iso) {
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
 function names(s) { return String(s || "").split(/[、,，\/／\s]+/).filter(Boolean); }
 function pct(n) { return Math.round(n) + "%"; }
-function color(name) { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; const i = (S.D ? S.D.people.findIndex(p => p.name === name) : -1); return COLORS[(i >= 0 ? i : h) % COLORS.length]; }
+/* 人員代表色：登入畫面與內頁都依「執行人員」名單順序取色，確保同一人顏色一致 */
+function color(name) {
+  let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const list = S.D && S.D.staff ? S.D.staff : (S.people && S.people.length ? S.people : (window.SEED ? window.SEED.people.filter(p => !p.manager) : []));
+  const i = list.findIndex(p => p.name === name);
+  return COLORS[(i >= 0 ? i : h) % COLORS.length];
+}
 function av(name, cls) { return name ? `<span class="av ${cls || ""}" style="background:${color(name)}" title="${esc(name)}">${esc(String(name).slice(-2))}</span>` : ""; }
 function curWeek() { return WEEKS.find(w => TODAY >= w.s && TODAY <= w.e) || null; }
 function stCls(st) { return {"已完成": "s-ok", "進行中": "s-run", "遇到困難": "s-bad", "未開始": "s-idle", "待回應": "s-warn", "協助中": "s-run", "已解決": "s-ok"}[st] || "s-idle"; }
